@@ -31,27 +31,25 @@ usage_msg = """jungle [options] main_python_file.py
 
 -p <path of modules separated by '"""+os.pathsep+"""'>
 -x <excluded module name>
+-l <shared object/dynamic library name> current python2x by default
+-r <precompiled runtime modules> 'jungle.Z' by default
+-f "<compiler flags>"
+
 --verbose   verbose compilation process
 --no-logo   hide copyright logo
 --no-python disable to find & append path of installed python modules
 --no-main   produce .C files contains frized modules table
 --c-only    produce .C file only, do not link final binary
---python <shared object/dynamic library name> current python by default
---runtime <precompiled runtime modules> 'jungle.Z' by default
---c-flags "<compiler flags>"
 --single    compile only main file
 --local     compile if in script folder (*default)
 --all       compile all dependenses
 
 microsoft windows specific:
---rcfile <resources definition.RC>
+--rc <resources definition.RC>
+--cc <ms|gnu|lcc|dmc>[,"compiler.exe-path"] """+flags['cc']+""" by default
 --windows   make executable for subsystem 'windows'
---cc <ms|gnu> """+flags['cc']+""" by default
+--console   make executable for subsystem 'console' (*defult)
 """
-#linux specific:
-#none
-#
-#"""
 
 class ErrorMessageException(Exception):
     pass
@@ -60,7 +58,7 @@ def GetMyOpts(a):
     try:
         return getopt.getopt(
               a,
-              'o:p:x:?hvV',
+              'o:p:x:l:r:f:?hvV',
               ['no-python',
                'no-logo',
                'no-main',
@@ -104,8 +102,10 @@ def OperateWithOpts(opts,flags):
             sys.exit(0)
         if o == '-o':
             flags['output-name'] = a
-        if o == '--runtime':
+        if o == '--runtime' or o == '-r':
             flags['runtime'] = os.path.normpath(os.path.abspath(a))
+        if o == '--python' or o == '-l':
+            flags['python'] = a
         if o == '--no-main':
             flags['no-main'] = True
         if o == '--c-only':
