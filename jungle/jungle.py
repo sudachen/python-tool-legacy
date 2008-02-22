@@ -1,12 +1,12 @@
 # -*- coding: cp1251 -*-
-# Copyright (c) 2006-2008, Alexey Sudachen, http://www.ethical-hacker.info
-# $Id:$
-
+#
+# (c)2008, Alexey Sudachen, alexey@sudachen.name
+# http://www.ethical-hacker.info/jungle
+#
 
 version = "3.0"
 
-import sys, locale
-import sys,os,os.path,getopt,marshal
+import sys,os,os.path,getopt,marshal,locale
 from modulefinder import *
 
 locale.setlocale(locale.LC_ALL,'')
@@ -46,7 +46,7 @@ usage_msg = """jungle [options] main_python_file.py
 
 microsoft windows specific:
 --rc <resources definition.RC>
---cc <ms|gnu|lcc|dmc>[,"compiler.exe-path"] """+flags['cc']+""" by default
+--cc <gnu|ms>[,"compiler.exe-path"] """+flags['cc']+""" by default
 --windows   make executable for subsystem 'windows'
 --console   make executable for subsystem 'console' (*defult)
 """
@@ -110,7 +110,7 @@ def OperateWithOpts(opts,flags):
             flags['no-main'] = True
         if o == '--c-only':
             flags['c-only'] = True
-        if o == '--c-flags':
+        if o == '--c-flags' or o == '-f':
             flags['c-flags'] = a
         if o == '--jrtl':
             flags['jrtl'] = a
@@ -123,7 +123,13 @@ def OperateWithOpts(opts,flags):
         if o == '--rcfile':
             flags['rcfile'] = a
         if o == '--cc':
+            cc_path = None
+            i = a.find(',')
+            if i > 0:
+                cc_path = a[i+1:]
+                a = a[:i]
             flags['cc'] = a
+            flags['cc-path'] = cc_path
         if o == '--single':
             flags['depth'] = 0
         if o == '--local':
@@ -162,19 +168,23 @@ def Compile(files,path,exclude,debug,no_main,depth,C_file):
         name = "__".join(real_name.split("."))
         if m.__code__:
             s = marshal.dumps(m.__code__)
+            if not m.__path__:
+                j_code = 'j_import_frozen_module("%s",%s)\n' % (real_name,repr(s))
+                c = compile(j_code,m.__file__,'exec')
+                s = marshal.dumps(c)
             msize = len(s)
             nsize = msize
             modules_size += msize
             modules_nsize += nsize
             print "%3d%% %-24s %s" % ( (nsize*100)/msize, real_name, m.__file__ )
-            C_file.write("char _S_"+name+"[] = \n")
+            C_file.write("static char _S_"+name+"[] = \n")
             for i in xrange(0,nsize):
               if i % 19 == 0:
                   if i: C_file.write("\"\n")
                   C_file.write("  \"")
               C_file.write("\\x%02x"%ord(s[i]))
             C_file.write("\";\n")
-            C_file.write(("int _S_"+name+"_length = %d;\n") %  nsize)
+            #C_file.write(("int _S_"+name+"_length = %d;\n") %  nsize)
             if m.__path__: msize = -msize
             compiled.append( (name, real_name, msize, nsize) )
 
@@ -184,7 +194,7 @@ def Compile(files,path,exclude,debug,no_main,depth,C_file):
     return compiled
 
 def FreezeTable(compiled,C_file):
-    C_file.write("\nstruct {char*_1;char*_2;int _3;} _Jungle_Modules[] = {\n")
+    C_file.write("\nstatic struct {char*_1;char*_2;int _3;} _Jungle_Modules[] = {\n")
     for i in compiled: C_file.write("{\"%s\",_S_%s,%d},\n" % (i[1],i[0],i[2]) )
     C_file.write("{0,0,0}};\n")
 
@@ -225,7 +235,7 @@ def Main(script,sys_argv):
     OperateWithOpts(opts,flags)
     if not flags.get('no-logo'):
         print ".Py Compiler "+version+" - the .py to .exe compiler"
-        print "(c)2006-2008, Alexey Sudachen, http://www.ethical-hacker.com/jungle"
+        print "(c)2008, Alexey Sudachen, http://www.ethical-hacker.com/jungle"
         print "~\n"
     if not args:
         print "error: there is no input file"
@@ -251,6 +261,7 @@ def Main(script,sys_argv):
     compiled = Compile(args,path,flags['exclude'],flags.get('debug'),flags.get('no-main'),flags.get('depth'),C_file)
     FreezeTable(compiled,C_file)
     C_file.write(frozen_main)
+    C_file.write(build_argv)
     C_file.close()
 
     if not flags.get('c-only') and not flags.get('no-main'):
@@ -270,9 +281,11 @@ def Main(script,sys_argv):
             flags['c-flags'] = flags['c-flags']+ ' -D_JUNGLE_CONSOLE_SUBSYSTEM'
 
         if flags['cc'] == 'ms' and sys.platform == 'win32':
-            cmd_S = 'cl %s "%s" -o "%s" "%s"' % (flags['c-flags'],C_file_name,output_name,python_lib)
+            CC = flags.get('cc-path','cl')
+            cmd_S = '"%s" %s "%s" -o "%s" "%s"' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
         else:
-            cmd_S = 'gcc %s "%s" -o "%s" %s' % (flags['c-flags'],C_file_name,output_name,python_lib)
+            CC = flags.get('cc-path','gcc')
+            cmd_S = '%s %s "%s" -o "%s" %s' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
 
         print cmd_S
         if os.system(cmd_S) != 0 :
@@ -291,7 +304,9 @@ frozen_header = """
 """
 
 frozen_main = """
-#include<string.h>
+#include <stdlib.h>
+#include <malloc.h>
+#include <string.h>
 
 #if defined _WIN32
 #define DLL_IMPORT __declspec(dllimport)
@@ -315,7 +330,6 @@ DLL_IMPORT extern int Py_IgnoreEnvironmentFlag;
 DLL_IMPORT extern int Py_OptimizeFlag;
 
 static int j_frozen_main(struct _frozen *);
-static char **j_buildargv(char const *input,int *count);
 
 static void *frozen_table_mem = 0;
 static int  frozen_table_count = 0;
@@ -346,6 +360,43 @@ static void j_extend_frozen_table(struct _frozen *ftable, int before)
     memset( PyImport_FrozenModules + frozen_table_count, 0, sizeof(struct _frozen) );
   }
 
+typedef struct PyObject PyObject;
+typedef struct PyMethodDef {
+    char  *ml_name; /* The name of the built-in function/method */
+    void  *ml_meth; /* The C function that implements it */
+    int    ml_flags;  /* Combination of METH_xxx flags, which mostly
+           describe the args expected by the C func */
+    char  *ml_doc;  /* The __doc__ attribute, or NULL */
+} PyMethodDef;
+enum {METH_VARARGS =0x0001};
+DLL_IMPORT extern PyObject _Py_NoneStruct;
+#define Py_None (&_Py_NoneStruct)
+
+DLL_IMPORT extern void Py_IncRef(PyObject *o);
+DLL_IMPORT extern void Py_DecRef(PyObject *o);
+DLL_IMPORT extern PyObject *PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname);
+DLL_IMPORT extern PyObject *PyImport_GetModuleDict();
+DLL_IMPORT extern PyObject *PyDict_GetItemString(PyObject *,char *);
+DLL_IMPORT extern PyObject *PyCFunction_NewEx(PyMethodDef *,void *,PyObject *);
+DLL_IMPORT extern void      PyModule_AddObject(PyObject *,char *,PyObject *);
+DLL_IMPORT extern PyObject *PyMarshal_ReadObjectFromString(char *, int);
+DLL_IMPORT extern PyObject *PyImport_AddModule(char *); 
+DLL_IMPORT extern PyObject *PyImport_ImportModule(char *); 
+DLL_IMPORT extern void      PyErr_Clear();
+#include <stdio.h>
+
+static void j_builtin_function(PyMethodDef *ml)
+  {
+    PyObject *builtin, *pfunc;
+    builtin  = PyDict_GetItemString(PyImport_GetModuleDict(),"__builtin__");
+    pfunc    = PyCFunction_NewEx(ml,0,0);
+    PyModule_AddObject(builtin,ml->ml_name,pfunc);
+    PyErr_Clear();
+  }
+
+static PyObject *j_import_frozen_module(PyObject *,PyObject *args);
+static PyMethodDef j_import_frozen_module_ml = { "j_import_frozen_module",&j_import_frozen_module,METH_VARARGS,0};
+
 int j_frozen_main_1(int argc, char **argv)
   {
     char *p;
@@ -370,7 +421,10 @@ int j_frozen_main_1(int argc, char **argv)
     Py_SetProgramName(argv[0]);
     Py_Initialize();
     PySys_SetArgv(argc,argv);
+
+    j_builtin_function(&j_import_frozen_module_ml);
     n = PyImport_ImportFrozenModule("__main__");
+
     if (n == 0)
       Py_FatalError("__main__ not frozen");
     if (n < 0)
@@ -379,10 +433,13 @@ int j_frozen_main_1(int argc, char **argv)
     return n<0?-1:0;
   }
 
+static char **j_buildargv(char *input,int *count);
+
 #if defined _JUNGLE_ON_POSIX || defined _JUNGLE_CONSOLE_SUBSYSTEM
 int main(int argc,char **argv)
 #elif defined _JUNGLE_ON_WINDOWS && defined _JUNGLE_WINDOWS_SUBSYSTEM
-int __stdcall WinMain(int,int,int,int)
+char *__stdcall GetCommandLineA();
+int __stdcall WinMain(int _0,int _1,int _2,int _3)
 #else
 #error "unknown platform"
 #endif
@@ -394,6 +451,152 @@ int __stdcall WinMain(int,int,int,int)
 #endif
     return j_frozen_main_1(argc,argv);
   }
+
+static PyObject *j_import_frozen_module(PyObject *_0,PyObject *args)
+  {
+    char *mod_name = 0, *mod_code = 0, *mod_file = "<frozen>";
+    int mod_code_len = 0;
+    if ( PyArg_ParseTuple(args,"ss#|s",&mod_name,&mod_code,&mod_code_len,&mod_file) )
+      {
+        PyObject *code = PyMarshal_ReadObjectFromString(mod_code,mod_code_len);
+        PyObject *o = 0;
+//        printf("frozen-import: %s\\n",mod_name);
+        if ( code )
+          {
+            o = PyImport_ExecCodeModuleEx(mod_name, code, mod_file);
+            Py_DecRef(code);
+          }
+        if ( o )
+          {
+            Py_IncRef(Py_None);
+            return Py_None;
+          }
+      }
+    return 0;
+  }
+
+"""
+
+build_argv = """
+#if defined _JUNGLE_ON_WINDOWS && defined _JUNGLE_WINDOWS_SUBSYSTEM
+
+static void j_freeargv(char **vector)
+  {
+    char **scan;
+    if (vector != NULL)
+      {
+        for (scan = vector; *scan != NULL; scan++) free (*scan);
+        free (vector);
+      }
+  }
+
+#define ISBLANK(a) ((a) == ' ' || (a) == '\t')
+static char **j_buildargv(char *input, int *_argc)
+  {
+
+    enum {EOS=0,INITIAL_MAXARGC=128};
+
+    char *arg;
+    char *copybuf;
+    int squote = 0;
+    int dquote = 0;
+    int bsquote = 0;
+    int argc = 0;
+    int maxargc = 0;
+    char **argv = NULL;
+    char **nargv;
+
+    if (input != NULL)
+      {
+        copybuf = (char *) _alloca (strlen (input) + 1);
+        /* Is a do{}while to always execute the loop once.  Always return an
+           argv, even for null strings.  See NOTES above, test case below. */
+        do
+          {
+            /* Pick off argv[argc] */
+            while ( ISBLANK(*input) )
+              {
+                input++;
+              }
+            if ((maxargc == 0) || (argc >= (maxargc - 1)))
+              {
+                /* argv needs initialization, or expansion */
+                if (argv == NULL)
+                  {
+                    maxargc = INITIAL_MAXARGC;
+                    nargv = (char **) malloc (maxargc * sizeof (char *));
+                  }
+                else
+                  {
+                    maxargc *= 2;
+                    nargv = (char **) realloc (argv, maxargc * sizeof (char *));
+                  }
+                if (nargv == NULL)
+                  {
+                    if (argv != NULL)
+                      {
+                        j_freeargv (argv);
+                        argv = NULL;
+                      }
+                    break;
+                  }
+                argv = nargv;
+                argv[argc] = NULL;
+              }
+            /* Begin scanning arg */
+            arg = copybuf;
+            while (*input != EOS)
+              {
+                if (ISBLANK (*input) && !squote && !dquote && !bsquote)
+                  {
+                    break;
+                  }
+                else
+                  {
+                    if (bsquote)
+                      {
+                        bsquote = 0;
+                        *arg++ = *input;
+                      }
+                    else if (squote)
+                      {
+                        if (*input == '\\'') squote = 0;
+                        else *arg++ = *input;
+                      }
+                    else if (dquote)
+                      {
+                        if (*input == '"') dquote = 0;
+                        else *arg++ = *input;
+                      }
+                    else
+                      {
+                        if (*input == '\\'') squote = 1;
+                        else if (*input == '"') dquote = 1;
+                        else *arg++ = *input;
+                      }
+                    input++;
+                  }
+              }
+            *arg = EOS;
+            argv[argc] = strdup (copybuf);
+            if (argv[argc] == NULL)
+              {
+                j_freeargv (argv);
+                argv = NULL;
+                break;
+              }
+            argc++;
+            argv[argc] = NULL;
+
+            while (ISBLANK (*input)) ++input;
+          }
+        while (*input != EOS);
+      }
+    *_argc = argc;
+    return (argv);
+  }
+
+#endif
 """
 
 try:
