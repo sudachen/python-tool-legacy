@@ -11,162 +11,274 @@
 #include <Python.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 enum { 
-  LZSS_MIN_LEN = 4, 
+  LZSS_MIN_LEN = 2, 
   LZSS_MAX_LEN = 15, 
-  LZSS_TABLE_ROWS = 4, 
-  LZSS_TABLE_MOD = 4096, 
-  LZSS_TABLE_LEN = (LZSS_TABLE_MOD+1)*LZSS_TABLE_ROWS 
+  LZSS_TABLE_MOD = 4095, /*4095, */
+  LZSS_TABLE_LEN = LZSS_TABLE_MOD+1,
 };
 
-enum { PARENT, LEFT, RIGHT, NEXT };
+#define C_STATIC /*static*/
 
-static int lzss_cmp(char *a, char *b, int n)
+C_STATIC int lzss_cmp_less(unsigned char *a, unsigned char *b, int *cnt, int maxl)
   {
+    int i = 0;
+    for ( ; i < maxl/*LZSS_MAX_LEN*/; ++i ) 
+      { 
+        int j = (int)a[i]-(int)b[i]; 
+        if ( j < 0 ) { *cnt = i; return 1; }
+        if ( j ) { *cnt = i; return 0; }
+      }
+    *cnt = i;
+    return 0;
   }
 
-static void lzss_delete_node(short *table, int n)
+C_STATIC int lzss_search_index(char **table_L, char**iE, char* val, int strong, int *p_l, int maxl)
   {
-    short r = table[0]*LZSS_TABLE_ROWS;
-    int o = 0, n = (in_b % LZSS_TABLE_MOD) +1;
+    char **iS = table_L;
+    int len = iE - iS;
+    int half;
+    char ** middle;
+    int  l = 0, ll = 0;
+    if (p_l) *p_l = 0;
 
-    if ( o = table[c+NEXT] )
+    while (len > 0)
       {
-        int x = table[c+NEXT];
-        table[x+LEFT]  = table[c+LEFT];
-        table[x+RIGHT] = table[c+RIGHT];
-        table[x+NEXT]  = table[c+NEXT];
-        if ( table[x+LEFT] ) table[table[x+LEFT]+PARENT] = x;
-        if ( table[x+RIGHT] ) table[table[x+RIGHT]+PARENT] = x;
-      }
-
-    if ( table[c+PARENT] )
-      {
-        l = table[c+PARENT];
-        if ( o ) 
+        half = len >> 1;
+        middle = iS + half;
+        if ( lzss_cmp_less(*middle,val,&l,maxl) )
           {
-            if ( table[l+LEFT] == c ) table[l+LEFT] = o;
-            else table[l+RIGHT] = o;
+            iS = middle;
+            ++iS;
+            len = len - half - 1;
           }
         else
           {
+            len = half;
+          }
+      }
+
+    if ( iS != iE )
+      {
+        char **p = iS-1;
+        for ( l = 0; l < maxl && (*iS)[l] == val[l]; ) ++l;         
+        if ( p >= table_L && strong == 2 )
+          {
+            for ( ll = 0; ll < maxl && (*p)[ll] == val[ll]; ) ++ll;
+            if ( ll > l ) iS = p, l = ll;
           }
       }
     else
+      l = 0;
+
+    if ( strong == 1 )
       {
-        // root
-        accert(r == c);
-        if ( o ) r = o;
-        else if ( table[c+LEFT] ) // left
+        char **k = iS;
+        assert ( iS != iE );
+
+        if ( *k != val )
+          for ( ; k >= table_L ; --k ) if (*k == val || **k != *val) break;
+        if ( *k != val )
+          for ( k = iS ; k != iE ; ++k ) if (*k == val || **k != *val) break;
+        if ( *k == val )
+          iS = k;
+      }
+
+    assert( strong!=1 || *iS == val );
+    if ( l ) assert( memcmp(val,*iS,l) == 0 );
+    if ( p_l ) *p_l = l;
+
+    return iS-table_L;
+  }
+
+C_STATIC void lzss_replace_string(char **table, char *in_b, int r_i)
+  {
+    int l, o_idx, idx;
+    if (r_i >= LZSS_TABLE_MOD) // replace
+      {
+        char *p = in_b+(r_i-LZSS_TABLE_MOD);
+        o_idx = lzss_search_index(table,table+LZSS_TABLE_MOD,p,1,0,LZSS_MAX_LEN);
+
+        assert( o_idx >=0 && o_idx < LZSS_TABLE_MOD );
+        if ( !(l = memcmp(p,in_b+ r_i,LZSS_MAX_LEN)) )
           {
-            if ( table[c+RIGHT] ) 
-              r = table[()?c+LEFT:c+RIGHT];
+            table[o_idx] = in_b+r_i;          
+            return;
+          }        
+      }
+    else // append
+      {
+        o_idx = r_i;
+        l = 1;
+      }
+
+    if ( l < 0  )  // old string less then new
+      { // working with right part
+        if ( o_idx == LZSS_TABLE_MOD-1 )
+          {
+            table[o_idx] = in_b+r_i;
+          }
+        else
+          {
+            char **table_L = table + (o_idx + 1);
+            idx = lzss_search_index(table_L,table+LZSS_TABLE_MOD,in_b+r_i,0,&l,LZSS_MAX_LEN);
+            memmove(table_L-1,table_L,idx*sizeof(char*));
+            table_L[idx-1] = in_b+r_i;
+          }
+      }
+    else  // old string great then new
+      { // working with left part
+        char **table_R = table + o_idx;
+        idx = lzss_search_index(table,table_R,in_b+r_i,0,&l,LZSS_MAX_LEN);
+        memmove(table+idx+1,table+idx,((table_R-table)-idx)*sizeof(char*));
+        table[idx] = in_b+r_i;
+      }
+  }
+
+C_STATIC short lzss_update_table(char **table, char *in_b, int _in_i, int out_l)
+  {
+    int code = 0, idx = 0, s_i, l=0;
+    char **table_R;
+    int r_i = _in_i-(LZSS_MAX_LEN-1);  // old (will replaced) string
+    int t_i = _in_i;                   // encoded string
+
+    if ( r_i > LZSS_TABLE_MOD )
+      table_R = table + LZSS_TABLE_MOD;
+    else
+      table_R = table + r_i;
+
+    // encoding
+    idx = lzss_search_index(table,table_R,in_b+t_i,2,&l,(out_l >= LZSS_MAX_LEN ? LZSS_MAX_LEN : out_l));
+    s_i = t_i - (table[idx]-in_b);
+    if ( l >= LZSS_MIN_LEN )
+      {
+        assert(s_i <= LZSS_TABLE_MOD+LZSS_MAX_LEN && s_i >= LZSS_MAX_LEN );
+        code = (((s_i-LZSS_MAX_LEN)%LZSS_TABLE_MOD)<<4)|l;  
+      }
+
+    if ( out_l-- >= LZSS_MAX_LEN )
+      lzss_replace_string(table,in_b,r_i++);
+
+    // adding new strings
+    if ( l >= LZSS_MIN_LEN )
+      while ( --l && out_l-- >= LZSS_MAX_LEN )
+        lzss_replace_string(table,in_b,r_i++);
+
+    return code;
+  }
+
+C_STATIC int _lzss_compress(char *in_b, int in_b_len, char *out_b, int out_b_len)
+  {
+    char **table = 0; 
+    int  out_i = 4, in_i = 0;
+    unsigned char *cnt_p = 0;
+
+    if ( in_b_len < 2*LZSS_MAX_LEN ) return 0;
+
+    out_b[0] = in_b_len&0x0ff;
+    out_b[1] = (in_b_len>>8)&0x0ff;
+    out_b[2] = (in_b_len>>16)&0x0ff;
+    out_b[3] = (in_b_len>>24)&0x0ff;        
+
+    table = malloc(LZSS_TABLE_LEN*sizeof(char**));
+    memset(table,0,LZSS_TABLE_LEN*sizeof(char**));
+    table[0] = in_b;
+
+    out_b[out_i++] = 0;
+    cnt_p = out_b+out_i;
+    out_b[out_i++] = LZSS_MAX_LEN;        
+    memcpy(out_b+out_i,in_b,LZSS_MAX_LEN);
+    out_i += LZSS_MAX_LEN;
+    in_i  += LZSS_MAX_LEN;
+        
+    while ( in_i <  in_b_len && out_i+1 < out_b_len )
+      {
+        unsigned short code = lzss_update_table(table,in_b,in_i,in_b_len-in_i);
+        if ( !code )
+          {
+            if ( !cnt_p || (!cnt_p[-1] && *cnt_p == 255) ) 
+              {
+                out_b[out_i++] = 0x80;
+                *(cnt_p = out_b + out_i++) = in_b[in_i++];
+              }
             else
-              r = table[c+LEFT];
-          }
-        else
-          r = table[c+RIGHT]; // right
-        table[0] = r;
-        table[r+PARENT] = 0; // root node has no parent
-      }
-  }
-
-static int lzss_insert_node(short *table, int n, char *in_b, int l)
-  {
-    table[n+PARENT] = 0;
-    table[n+LEFT] = 0;
-    table[n+RIGHT] = 0;
-    table[n+NEXT] = 0;
-
-    /* add node */
-    for(;;)
-      {
-        l = lzss_cmp(in_b,o,LZSS_MAX_LEN);
-        if ( l > 0 )
-          {
-          }
-        else if ( l < 0 )
-          {
+              {
+                if ( cnt_p[-1] & 0x80 )
+                  {
+                    out_b[out_i++] = *cnt_p;
+                    *cnt_p = cnt_p[-1] = 0;
+                  }
+                ++*cnt_p;
+                out_b[out_i++] = in_b[in_i++];
+              }
           }
         else
           {
-            table[o+NEXT] = c;
-            break;
+            int l = code&0x0f;
+            cnt_p = 0;
+            out_b[out_i++] = code&0x0ff;
+            out_b[out_i++] = (code>>8)&0x0ff;
+            in_i += l;
           }
       }
+    if ( in_i != in_b_len ) out_i = -out_i;
+    free(table);
+    return out_i;
   }
 
-static int lzss_update_table(short *table, char *in_b, int in_i, int in_b_len)
-  {
-    int o = 0, n = (in_b % LZSS_TABLE_MOD) +1;
-    short r = table[0]*LZSS_TABLE_ROWS;
-    lzss_delete_node(table,n);
-    return lzss_insert_node(table,n,in_b,LZSS_MAX_LEN);
-  }
-
-static PyObject *lzss_compress(PyObject *_0,PyObject *args)
+C_STATIC PyObject *lzss_compress(PyObject *_0,PyObject *args)
   {
     char *in_b;
     int   in_b_len;
     if ( PyArg_ParseTuple(args,"s#",&in_b,&in_b_len) )
       {
-        short *table = malloc(LZSS_TABLE_LEN*sizeof(short));
-        int  out_b_len = in_b_len+4+2;
-        unsigned char *out_b = malloc(out_b_len);
-        int  out_i = 4, int_i = 0;
-        unsigned char *cnt_p = 0;
-        out_b[0] = in_b_len&0x0ff;
-        out_b[1] = (in_b_len>>8)&0x0ff;
-        out_b[2] = (in_b_len>>16)&0x0ff;
-        out_b[3] = (in_b_len>>24)&0x0ff;
-        memset(table,0,LZSS_TABLE_LEN*sizeof(short));
-        table[0] = 1;
-        out_b[out_i++] = 0;
-        cnt_p = out_b;
-        out_b[out_i++] = LZSS_MAX_LEN - 1;        
-        memcpy(out_b+out_i,in_b,LZSS_MAX_LEN);
-        while ( in_i != in_b_len && out_i+1 < out_b_len )
-          {
-            unsigned short code = lzss_update_table(table,in_b,in_i,in_b_len);
-            if ( !code )
-              {
-                if ( !cnt_p || (!cnt_[-1] && *cnt_p == 255) ) 
-                  {
-                    out_b[out_i++] = 0x80;
-                    *(cnt_p = out_b + out_i++) = in_b[in_i++];
-                  }
-                else
-                  {
-                    if ( cnt_p[-1] & 0x80 )
-                      {
-                        out_p[out_i++] = *cnt_p;
-                        *cnt_p = cnt_p[-1] = 0;
-                      }
-                    ++*cnt_p;
-                    out_b[out_i++] = in_b[in_i++];
-                  }
-              }
-            else
-              {
-                cnt_p = 0;
-                out_b[out_i++] = code&0x0ff;
-                out_b[out_i++] = (code>>8)&0x0ff;
-                in_i += code&0x0f;
-              }
-          }
-        free(table);
-        return PyString_FromStringAndSize(out_b,out_i);
+        int  out_b_len = in_b_len, out_i = 0;
+        unsigned char *out_b = 0;
+        PyObject *ret = 0;
+        out_b = malloc(out_b_len);
+        out_i = _lzss_compress(in_b,in_b_len,out_b,out_b_len);
+        if ( out_i > 0 )
+          ret = PyString_FromStringAndSize(out_b,out_i);
+        else
+          PyErr_SetString(PyExc_Exception,"LZSS failed");
+        free(out_b);
       }
     return 0;
   }
 
-static PyObject *lzss_decompress(PyObject *_0,PyObject *args)
+
+C_STATIC int _lzss_decompress(char *in_b, int in_b_len, char *out_b, int out_b_len)
   {
     return 0;
   }
 
-static PyMethodDef lzss_funcs[] =
+C_STATIC PyObject *lzss_decompress(PyObject *_0,PyObject *args)
+  {
+    char *in_b;
+    int   in_b_len;
+    if ( PyArg_ParseTuple(args,"s#",&in_b,&in_b_len) )
+      {
+        int  out_b_len = 0,, out_i = 0;
+        unsigned char *out_b = 0;
+        PyObject *ret = 0;
+        
+        out_b_len = (unsigned int)in_b[0]|((unsigned int)in_b[1]<<8)|
+          ((unsigned int)in_b[2]<<16)|((unsigned int)in_b[3]<<24);
+
+        out_b = malloc(out_b_len);
+        out_i = _lzss_decompress(in_b+4,in_b_len-4,out_b,out_b_len);
+        if ( out_i > 0 )
+          ret = PyString_FromStringAndSize(out_b,out_i);
+        else
+          PyErr_SetString(PyExc_Exception,"LZSS failed");
+        free(out_b);
+      }
+    return 0;
+  }
+
+C_STATIC PyMethodDef lzss_funcs[] =
   {
     {"compress",lzss_compress,METH_VARARGS,0},
     {"decompress",lzss_decompress,METH_VARARGS,0},
@@ -179,9 +291,55 @@ void init_lzss()
   }
 
 #ifdef _LZSS_BUILD_TEST
+#include <stdio.h>
+
 int main()
   {
-    printf("passed\n");
+    FILE *f;
+    int f_len, out_i, chk_i;
+    char *in_b, *out_b, *chk_b;
+
+    f = fopen("_lzss.c","rt");
+    fseek(f,0,SEEK_END);
+    f_len = ftell(f);
+    fseek(f,0,SEEK_SET);
+    in_b = malloc(f_len);
+    out_b = malloc(f_len);
+    chk_b = malloc(f_len);
+    fread(in_b,1,f_len,f);
+    fclose(f);
+
+    out_i = _lzss_compress(in_b,f_len,out_b,f_len);
+    printf("compress passed with code %d, buffer %d\n",out_i,f_len);
+
+    if ( out_i )
+      {
+        f = fopen("_lzss.Z","wb");
+        fwrite(out_b,1,abs(out_i),f);
+        fclose(f);
+      }
+
+    if ( out_i > 4 )
+      {
+        chk_i = _lzss_decompress(out_b+4,out_i-4,chk_b,f_len);
+        printf("decompress passed with code %d, buffer %d\n",chk_i,out_i);
+
+        if ( chk_i )
+          {
+            f = fopen("_lzss.X","wb");
+            fwrite(chk_b,1,abs(chk_i),f);
+            fclose(f);
+          }
+
+        if ( chk_i > 0 && chk_i == f_len )
+          {
+            int c = memcmp(chk_b,in_b,f_len);
+            if ( !c ) printf("succeeded\n");
+          }
+      }
+
     return 0;
   }
+
+
 #endif
