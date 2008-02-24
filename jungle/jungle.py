@@ -37,7 +37,6 @@ usage_msg = """jungle [options] main_python_file.py
 
 --verbose   verbose compilation process
 --no-logo   hide copyright logo
---no-python disable to find & append path of installed python modules
 --no-main   produce .C files contains frized modules table
 --c-only    produce .C file only, do not link final binary
 --single    compile only main file
@@ -45,11 +44,13 @@ usage_msg = """jungle [options] main_python_file.py
 --all       compile all dependenses
 
 microsoft windows specific:
---rc <resources definition.RC>
+--rc <rcfile.RC>
 --cc <gnu|ms>[,"compiler.exe-path"] """+flags['cc']+""" by default
 --windows   make executable for subsystem 'windows'
 --console   make executable for subsystem 'console' (*defult)
 """
+
+#--no-python disable to find & append path of installed python modules
 
 class ErrorMessageException(Exception):
     pass
@@ -58,7 +59,7 @@ def GetMyOpts(a):
     try:
         return getopt.getopt(
               a,
-              'o:p:x:l:r:f:?hvV',
+              'o:p:x:l:r:f:?hvVZ',
               ['no-python',
                'no-logo',
                'no-main',
@@ -129,13 +130,15 @@ def OperateWithOpts(opts,flags):
                 cc_path = a[i+1:]
                 a = a[:i]
             flags['cc'] = a
-            flags['cc-path'] = cc_path
+            if cc_path: flags['cc-path'] = cc_path
         if o == '--single':
             flags['depth'] = 0
         if o == '--local':
             flags['depth'] = 1
         if o == '--all':
             flags['depth'] = 2
+        if o == '-Z':
+            flags['compress'] = True
         if o == '--print-version' or o == '-V':
             print version
             sys.exit(0)
@@ -168,15 +171,28 @@ def Compile(files,path,exclude,debug,no_main,depth,C_file):
         name = "__".join(real_name.split("."))
         if m.__code__:
             s = marshal.dumps(m.__code__)
+            o_msize = len(s)
+            o_nsize = o_msize
+
             if not m.__path__:
-                j_code = 'j_import_frozen_module("%s",%s)\n' % (real_name,repr(s))
+
+                if compress_hook:
+                    try:
+                        s = compress_hook(s,'JJLZ')
+                        o_nsize = len(s)
+                    except:
+                        #print str(sys.exc_info()[1])
+                        pass
+
+                j_code = 'ed62969f98484bca902e8af82f039880("%s",%s)\n' % (real_name,repr(s))
                 c = compile(j_code,m.__file__,'exec')
                 s = marshal.dumps(c)
+
             msize = len(s)
             nsize = msize
-            modules_size += msize
-            modules_nsize += nsize
-            print "%3d%% %-24s %s" % ( (nsize*100)/msize, real_name, m.__file__ )
+            modules_size += o_msize
+            modules_nsize += o_nsize
+            print "%3d%% %-24s %s" % ( (o_nsize*100)/o_msize, real_name, m.__file__ )
             C_file.write("static char _S_"+name+"[] = \n")
             for i in xrange(0,nsize):
               if i % 19 == 0:
@@ -229,14 +245,18 @@ def AppendPythonPath(ignore_python):
                     pass
     return addpath
 
+compress_hook = None
+
 def Main(script,sys_argv):
-    global flags, version, frozen_main
+    global flags, version, frozen_main, compress_hook
     opts, args = GetMyOpts(sys_argv)
     OperateWithOpts(opts,flags)
+
     if not flags.get('no-logo'):
         print ".Py Compiler "+version+" - the .py to .exe compiler"
         print "(c)2008, Alexey Sudachen, http://www.ethical-hacker.com/jungle"
         print "~\n"
+
     if not args:
         print "error: there is no input file"
         print "~\n"
@@ -248,6 +268,13 @@ def Main(script,sys_argv):
     path.extend(flags['addpath'])
     path.extend(AppendPythonPath(flags.get('no-python')))
     sys.path.extend(AppendPythonPath(False))
+
+    if flags.get('compress'): 
+        try:
+            import _lzss
+            compress_hook = _lzss.compress
+        except:
+            print 'failed to load _lzss extesion, compression is disabled'
 
     output_name = flags.get('output-name',None)
     if not output_name:
@@ -261,28 +288,38 @@ def Main(script,sys_argv):
     compiled = Compile(args,path,flags['exclude'],flags.get('debug'),flags.get('no-main'),flags.get('depth'),C_file)
     FreezeTable(compiled,C_file)
     C_file.write(frozen_main)
-    C_file.write(build_argv)
+    if flags['subsystem'] == 'windows' and sys.platform == 'win32':
+        C_file.write(build_argv)
     C_file.close()
 
     if not flags.get('c-only') and not flags.get('no-main'):
         if sys.platform == 'win32':
-            if flags['cc'] == 'ms':
-                python_lib = os.path.join(sys.exec_prefix,'libs','python%d%d.lib'%sys.version_info[:2])
-            else:
-                python_lib = '-L"'+os.path.join(sys.exec_prefix,'libs')+'" -lpython%d%d'%sys.version_info[:2]
             flags['c-flags'] = flags.get('c-flags','') + ' -D_JUNGLE_ON_WINDOWS'
         else:
-            python_lib = '-lpython%d%d'%sys.version_info[:2]
             flags['c-flags'] = flags.get('c-flags','') + ' -D_JUNGLE_ON_POSIX'
 
-        if flags['subsystem'] == 'windows':
+        if flags.get('python'):
+            if flags['cc'] == 'ms':
+                python_lib = flags['python']+'.lib'
+            else:
+                python_lib = '-l'+flags['python']
+        else:
+            if sys.platform == 'win32':
+                if flags['cc'] == 'ms':
+                    python_lib = os.path.join(sys.exec_prefix,'libs','python%d%d.lib'%sys.version_info[:2])
+                else:
+                    python_lib = '-L"'+os.path.join(sys.exec_prefix,'libs')+'" -lpython%d%d'%sys.version_info[:2]
+            else:
+                python_lib = '-lpython%d%d'%sys.version_info[:2]
+
+        if flags['subsystem'] == 'windows' and sys.platform == 'win32':
             flags['c-flags'] = flags['c-flags']+ ' -D_JUNGLE_WINDOWS_SUBSYSTEM'
         else:
             flags['c-flags'] = flags['c-flags']+ ' -D_JUNGLE_CONSOLE_SUBSYSTEM'
 
         if flags['cc'] == 'ms' and sys.platform == 'win32':
             CC = flags.get('cc-path','cl')
-            cmd_S = '"%s" %s "%s" -o "%s" "%s"' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
+            cmd_S = '%s %s "%s" -o "%s" "%s"' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
         else:
             CC = flags.get('cc-path','gcc')
             cmd_S = '%s %s "%s" -o "%s" %s' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
@@ -372,8 +409,8 @@ enum {METH_VARARGS =0x0001};
 DLL_IMPORT extern PyObject _Py_NoneStruct;
 #define Py_None (&_Py_NoneStruct)
 
-DLL_IMPORT extern void Py_IncRef(PyObject *o);
-DLL_IMPORT extern void Py_DecRef(PyObject *o);
+DLL_IMPORT extern void      Py_IncRef(PyObject *o);
+DLL_IMPORT extern void      Py_DecRef(PyObject *o);
 DLL_IMPORT extern PyObject *PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname);
 DLL_IMPORT extern PyObject *PyImport_GetModuleDict();
 DLL_IMPORT extern PyObject *PyDict_GetItemString(PyObject *,char *);
@@ -383,7 +420,7 @@ DLL_IMPORT extern PyObject *PyMarshal_ReadObjectFromString(char *, int);
 DLL_IMPORT extern PyObject *PyImport_AddModule(char *); 
 DLL_IMPORT extern PyObject *PyImport_ImportModule(char *); 
 DLL_IMPORT extern void      PyErr_Clear();
-#include <stdio.h>
+DLL_IMPORT extern PyObject *PyExc_ImportError;
 
 static void j_builtin_function(PyMethodDef *ml)
   {
@@ -395,7 +432,7 @@ static void j_builtin_function(PyMethodDef *ml)
   }
 
 static PyObject *j_import_frozen_module(PyObject *,PyObject *args);
-static PyMethodDef j_import_frozen_module_ml = { "j_import_frozen_module",&j_import_frozen_module,METH_VARARGS,0};
+static PyMethodDef j_import_frozen_module_ml = { "ed62969f98484bca902e8af82f039880",&j_import_frozen_module,METH_VARARGS,0};
 
 int j_frozen_main_1(int argc, char **argv)
   {
@@ -411,7 +448,6 @@ int j_frozen_main_1(int argc, char **argv)
     if ( Z_frozen )
       {
         j_extend_frozen_table(Z_frozen,0);
-        PyImport_ImportFrozenModule("jungle_runtime_import_hook");
       }
 #endif
 
@@ -452,15 +488,30 @@ int __stdcall WinMain(int _0,int _1,int _2,int _3)
     return j_frozen_main_1(argc,argv);
   }
 
+static char *j_jjlz_decompressor(unsigned char *buffer, int *len);
 static PyObject *j_import_frozen_module(PyObject *_0,PyObject *args)
   {
     char *mod_name = 0, *mod_code = 0, *mod_file = "<frozen>";
     int mod_code_len = 0;
     if ( PyArg_ParseTuple(args,"ss#|s",&mod_name,&mod_code,&mod_code_len,&mod_file) )
       {
-        PyObject *code = PyMarshal_ReadObjectFromString(mod_code,mod_code_len);
+        PyObject *code = 0;
         PyObject *o = 0;
-//        printf("frozen-import: %s\\n",mod_name);
+        char *temp_buff = 0;
+        if ( mod_code_len >= 8 && 0 == memcmp(mod_code,"JJLZ",4) ) 
+          { 
+            temp_buff = j_jjlz_decompressor(mod_code,&mod_code_len);
+            if ( !temp_buff )
+              {
+                PyErr_SetString(PyExc_ImportError,"failed to init module");
+                return 0;
+              }
+            mod_code = temp_buff;
+          }
+
+        code = PyMarshal_ReadObjectFromString(mod_code,mod_code_len);
+        if ( temp_buff ) free(temp_buff);
+
         if ( code )
           {
             o = PyImport_ExecCodeModuleEx(mod_name, code, mod_file);
@@ -473,6 +524,50 @@ static PyObject *j_import_frozen_module(PyObject *_0,PyObject *args)
           }
       }
     return 0;
+  }
+
+static char *j_jjlz_decompressor(unsigned char *in_b, int *inout_len)
+  {
+    enum { JJLZ_MAX_LEN = 15 }; 
+
+    int  out_i=0, in_i = 0, out_b_len, in_b_len = *inout_len-8;
+    char *out_b;    
+
+    in_b += 4; /*skip 'JJLZ'*/
+    out_b_len = (unsigned int)in_b[0]|((unsigned int)in_b[1]<<8)|
+          ((unsigned int)in_b[2]<<16)|((unsigned int)in_b[3]<<24);
+    out_b = malloc(out_b_len);
+    in_b += 4; /*skip out_b_len*/
+
+    while ( in_i < in_b_len && out_i < out_b_len )
+      {
+        if ( in_b[in_i] == 0x80 )
+          {/* one char */
+            out_b[out_i++] = in_b[++in_i];
+            ++in_i;
+          }
+        else if ( !in_b[in_i] )
+          {/* several chars */
+            int l = (int)in_b[++in_i]+1;            
+            ++in_i;
+            while ( l-- )
+              {
+                out_b[out_i++] = in_b[in_i++];
+              }
+          }
+        else
+          {/* code */
+            unsigned short code = (short)in_b[in_i]|((short)in_b[in_i+1] << 8);
+            int l = code & 0x0f;
+            int off = code >> 4;
+            memcpy(out_b+out_i,out_b+out_i-off-JJLZ_MAX_LEN,l);
+            out_i += l;
+            in_i += 2;
+          }
+      }
+
+    *inout_len = out_i;
+    return out_b;
   }
 
 """
