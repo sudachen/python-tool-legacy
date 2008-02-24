@@ -254,7 +254,8 @@ def Main(script,sys_argv):
 
     if not flags.get('no-logo'):
         print ".Py Compiler "+version+" - the .py to .exe compiler"
-        print "(c)2008, Alexey Sudachen, http://www.ethical-hacker.com/jungle"
+        print "(c)2008, Alexey Sudachen, alexey@sudachen.name"
+        print "http://www.ethical-hacker.com/jungle"
         print "~\n"
 
     if not args:
@@ -269,7 +270,7 @@ def Main(script,sys_argv):
     path.extend(AppendPythonPath(flags.get('no-python')))
     sys.path.extend(AppendPythonPath(False))
 
-    if flags.get('compress'): 
+    if flags.get('compress'):
         try:
             import _lzss
             compress_hook = _lzss.compress
@@ -417,8 +418,8 @@ DLL_IMPORT extern PyObject *PyDict_GetItemString(PyObject *,char *);
 DLL_IMPORT extern PyObject *PyCFunction_NewEx(PyMethodDef *,void *,PyObject *);
 DLL_IMPORT extern void      PyModule_AddObject(PyObject *,char *,PyObject *);
 DLL_IMPORT extern PyObject *PyMarshal_ReadObjectFromString(char *, int);
-DLL_IMPORT extern PyObject *PyImport_AddModule(char *); 
-DLL_IMPORT extern PyObject *PyImport_ImportModule(char *); 
+DLL_IMPORT extern PyObject *PyImport_AddModule(char *);
+DLL_IMPORT extern PyObject *PyImport_ImportModule(char *);
 DLL_IMPORT extern void      PyErr_Clear();
 DLL_IMPORT extern PyObject *PyExc_ImportError;
 
@@ -498,8 +499,8 @@ static PyObject *j_import_frozen_module(PyObject *_0,PyObject *args)
         PyObject *code = 0;
         PyObject *o = 0;
         char *temp_buff = 0;
-        if ( mod_code_len >= 8 && 0 == memcmp(mod_code,"JJLZ",4) ) 
-          { 
+        if ( mod_code_len >= 8 && 0 == memcmp(mod_code,"JJLZ",4) )
+          {
             temp_buff = j_jjlz_decompressor(mod_code,&mod_code_len);
             if ( !temp_buff )
               {
@@ -528,10 +529,10 @@ static PyObject *j_import_frozen_module(PyObject *_0,PyObject *args)
 
 static char *j_jjlz_decompressor(unsigned char *in_b, int *inout_len)
   {
-    enum { JJLZ_MAX_LEN = 15 }; 
+    enum { JJLZ_MAX_LEN = 15 };
 
     int  out_i=0, in_i = 0, out_b_len, in_b_len = *inout_len-8;
-    char *out_b;    
+    char *out_b;
 
     in_b += 4; /*skip 'JJLZ'*/
     out_b_len = (unsigned int)in_b[0]|((unsigned int)in_b[1]<<8)|
@@ -548,7 +549,7 @@ static char *j_jjlz_decompressor(unsigned char *in_b, int *inout_len)
           }
         else if ( !in_b[in_i] )
           {/* several chars */
-            int l = (int)in_b[++in_i]+1;            
+            int l = (int)in_b[++in_i]+1;
             ++in_i;
             while ( l-- )
               {
