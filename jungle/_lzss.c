@@ -1,4 +1,3 @@
-
 /*
 
   LZSS python module
