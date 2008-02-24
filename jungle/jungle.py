@@ -1,9 +1,9 @@
+#!/usr/bin/python
 # -*- coding: cp1251 -*-
 #
 # (c)2008, Alexey Sudachen, alexey@sudachen.name
 # http://www.ethical-hacker.info/jungle
 #
-
 
 version = "3.0"
 
@@ -312,7 +312,7 @@ def Main(script,sys_argv):
                 else:
                     python_lib = '-L"'+os.path.join(sys.exec_prefix,'libs')+'" -lpython%d%d'%sys.version_info[:2]
             else:
-                python_lib = '-lpython%d%d'%sys.version_info[:2]
+                python_lib = '-lpython%d.%d'%sys.version_info[:2]
 
         if flags['subsystem'] == 'windows' and sys.platform == 'win32':
             flags['c-flags'] = flags['c-flags']+ ' -D_JUNGLE_WINDOWS_SUBSYSTEM'

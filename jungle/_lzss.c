@@ -140,7 +140,10 @@ C_STATIC short lzss_update_table(char **table, char *in_b, int _in_i, int out_l)
     if ( r_i > LZSS_TABLE_MOD )
       table_R = table + LZSS_TABLE_MOD;
     else
-      table_R = table + r_i;
+      {
+        table_R = table + r_i;
+        if ( out_l < LZSS_MAX_LEN ) table_R -= (LZSS_MAX_LEN - out_l);
+      }
 
     // encoding
     idx = lzss_search_index(table,table_R,in_b+t_i,2,&l,maxl);
