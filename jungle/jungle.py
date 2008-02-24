@@ -321,7 +321,15 @@ def Main(script,sys_argv):
 
         if flags['cc'] == 'ms' and sys.platform == 'win32':
             CC = flags.get('cc-path','cl')
-            cmd_S = '%s %s "%s" -o "%s" "%s"' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
+            libs = [
+              'user32.lib',
+              'advapi32.lib',
+              'shell32.lib',
+              #'ole32.lib',
+              #'oleaut32.lib',
+              'gdi32.lib',
+              'ws2_32.lib']
+            cmd_S = '%s %s "%s" -o "%s" "%s" '% (CC,flags['c-flags'],C_file_name,output_name,python_lib) + ' '.join(libs)
         else:
             CC = flags.get('cc-path','gcc')
             cmd_S = '%s %s "%s" -o "%s" %s' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
