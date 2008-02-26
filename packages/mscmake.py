@@ -22,18 +22,39 @@ global_flags_set = {
     'LIB_FLAGS':[],
     'LIB_DEBUG_FLAGS':[],
     'LIB_RELEASE_FLAGS':[],
+    'RC_FLAGS':[],
+    'RC_DEBUG_FLAGS':[],
+    'RC_RELEASE_FLAGS':[],
+    'S_FLAGS':[],
+    'S_DEBUG_FLAGS':[],
+    'S_RELEASE_FLAGS':[],
     }
 
 global_build_type = 'RELEASE'
 global_build_config = 'DEFAULT'
 global_build_operation = 'BUILD'
+global_j_vals = {}
+global_verbose = False
+
+if sys.platform == 'win32':
+    global_tool_set = 'msc'
+else:
+    global_tool_set = 'gnu'
+
+def set_msc_tool():
+    global global_tool_set
+    global_tool_set = 'msc'
+def set_gnu_tool():
+    global global_tool_set
+    global_tool_set = 'gnu'
 
 def process_command_line():
-    opts,args = getopt.getopt(sys.argv[1:],"vh",[])
+    opts,args = getopt.getopt(sys.argv[1:],"vhj:",[])
 
     global global_build_type
     global global_build_config
     global global_build_operation
+    global global_verbose
 
     if args:
         if not args[0].lower() in ('release','debug','build','rebuild','clean'):
@@ -52,6 +73,17 @@ def process_command_line():
             print 'setting build operation to %s' %global_build_operation
             args = args[1:]
 
+    for i,j in opts:
+        if i == '-j':
+            val = True
+            k = j.find('=')
+            if k>0:
+                val = j[k+1:]
+                j = j[:k]
+            global_j_vals[j] = val
+        if i == '-v':
+            global_verbose = True
+
 def get_build_type():
     return global_build_type.lower()
 
@@ -64,6 +96,10 @@ def set_build_type(build_type):
     if not build_type in ('RELEASE','DEBUG'):
         raise Exception('invalid build type, should be RELEASE or DEBUG')
     global_build_type = build_type
+
+def set_build_config(build_config):
+    global global_build_config
+    global_build_config = build_config.upper()
 
 def _select_flags_with_build_type(prefix):
     return global_flags_set[prefix+global_build_type+'_FLAGS']
@@ -78,57 +114,145 @@ def _need_to_build(source,target):
         fmtime_I = os.stat(source)[stat.ST_MTIME]
     return fmtime_O == None or fmtime_O < fmtime_I
 
-def _ms_cl_compile_file(source,target,flags):
+def doi_build_it():
+    return global_build_operation == 'BUILD'
+
+def doi_need_2build_s2t(source,target):
+    return global_build_operation == 'BUILD' and _need_to_build(source,target)
+
+def doi_clean_it():
+    return global_build_operation == 'CLEAN'
+
+def doi_need_clean(target):
+    return global_build_operation == 'CLEAN' and os.path.exists(target)
+
+def try_clean_target(target):
+    if global_build_operation == 'CLEAN':
+        if os.path.exists(target):
+            if global_verbose: print 'unlink "%s"' % target
+            os.unlink(target)
+
+def try_compile(source,target,flags,format):
     if global_build_operation == 'BUILD':
         if _need_to_build(source,target):
-            cmd_S = 'cl %s -c -Fo"%s" %s' % (' '.join(flags),target,source)
-            print cmd_S
+            cmd_S = format % (' '.join(flags),target,source)
+            if global_verbose: print cmd_S
             e = os.system(cmd_S)
             if e != 0 :
-                raise Exception('failed to CC build: %s')
-    elif global_build_operation == 'CLEAN':
-        if os.path.exists(target):
-            print 'unlink "%s"' % target
-            os.unlink(target)
+                raise Exception('failed to compile: %s'%source)
+        return True
+
+def _ms_cl_compile_file(source,target,flags):
+    if not try_compile(source,target,flags,'cl %s -c -Fo"%s" %s'):
+        try_clean_target(target)
+
+def _gnu_cc_compile_file(source,target,flags,tool):
+    if not try_compile(source,target,flags,tool+' %s -c -o"%s" %s'):
+        try_clean_target(target)
 
 def _cc_build_rule(source,target,flags,deps):
     rel_flags = flags + global_flags_set['C_FLAGS'] + global_flags_set['CC_FLAGS'] \
         + _select_flags_with_build_type('C_') \
         + _select_flags_with_build_type('CC_')
-    _ms_cl_compile_file(source,target,rel_flags)
+    if global_tool_set == 'msc':
+        _ms_cl_compile_file(source,target,rel_flags)
+    else:
+        _gnu_cc_compile_file(source,target,rel_flags,'gcc')
     return target
 
 def _cxx_build_rule(source,target,flags,deps):
     rel_flags = flags + global_flags_set['C_FLAGS'] + global_flags_set['CXX_FLAGS'] \
         + _select_flags_with_build_type('C_') \
         + _select_flags_with_build_type('CXX_')
-    _ms_cl_compile_file(source,target,rel_flags)
+    if global_tool_set == 'msc':
+        _ms_cl_compile_file(source,target,rel_flags)
+    else:
+        _gnu_cc_compile_file(source,target,rel_flags,'g++')
+    return target
+
+def _rc_build_rule(source,target,flags,deps):
+    rel_flags = global_flags_set['RC_FLAGS'] + _select_flags_with_build_type('RC_')
+    if global_build_operation == 'BUILD':
+        if _need_to_build(source,target):
+            if global_tool_set == 'msc':
+                cmd_S = 'rc %s -fo"%s" %s' % (' '.join(flags),target,source)
+            else:
+                cmd_S = 'windres %s -Ocoff "%s" "%s"' % (' '.join(flags),source,target)
+            if global_verbose: print cmd_S
+            e = os.system(cmd_S)
+            if e != 0 :
+                raise Exception('failed to RC build: %s'%source)
+    else:
+        try_clean_target(target)
+    return target
+
+def _S_build_rule(source,target,flags,deps):
+    rel_flags = global_flags_set['S_FLAGS'] + _select_flags_with_build_type('S_')
+    if global_build_operation == 'BUILD':
+        if _need_to_build(source,target):
+            cmd_S = 'as %s -o"%s" %s' % (' '.join(flags),target,source)
+            if global_verbose: print cmd_S
+            e = os.system(cmd_S)
+            if e != 0 :
+                raise Exception('failed to GAS build: %s'%source)
+    else:
+        try_clean_target(target)
     return target
 
 global_tool_types = {
-    'c-file':{
-        'maker':_cc_build_rule,
-        'object-ext':'.obj','source_exts':['.c']},
-    'c++-file':{
-        'maker':_cxx_build_rule,
-        'object-ext':'.obj','source_exts':['.C','.cpp','.c++','.cc']},
-    'o-file':{
-        'maker':_fake_build_rule,
-        'object-ext':'.obj','source_exts':['.obj']},
-    'lib-file':{
-        'maker':_fake_build_rule,
-        'object-ext':'.lib','source_exts':['.lib']},
+    'msc':{
+        'c-file':{
+            'maker':_cc_build_rule,
+            'object-ext':'.obj','source_exts':['.c']},
+        'c++-file':{
+            'maker':_cxx_build_rule,
+            'object-ext':'.obj','source_exts':['.C','.cpp','.c++','.cc']},
+        'o-file':{
+            'maker':_fake_build_rule,
+            'object-ext':'.obj','source_exts':['.obj','.o']},
+        'lib-file':{
+            'maker':_fake_build_rule,
+            'object-ext':'.lib','source_exts':['.lib']},
+        'rc-file':{
+            'maker':_rc_build_rule,
+            'object-ext':'.res','source_exts':['.rc','.RC','.Rc']},
+        's-file':{
+            'maker':_S_build_rule,
+            'object-ext':'.obj','source_exts':['.S','.s']},
+        },
+    'gnu':{
+        'c-file':{
+            'maker':_cc_build_rule,
+            'object-ext':'.o','source_exts':['.c']},
+        'c++-file':{
+            'maker':_cxx_build_rule,
+            'object-ext':'.o','source_exts':['.C','.cpp','.c++','.cc']},
+        'o-file':{
+            'maker':_fake_build_rule,
+            'object-ext':'.o','source_exts':['.obj','.o']},
+        'lib-file':{
+            'maker':_fake_build_rule,
+            'object-ext':'.a','source_exts':['.lib']},
+        'rc-file':{
+            'maker':_rc_build_rule,
+            'object-ext':'.o','source_exts':['.rc','.RC','.Rc']},
+        's-file':{
+            'maker':_S_build_rule,
+            'object-ext':'.o','source_exts':['.S','.s']},
+        }
     }
 
-global_ext_map = {}
-for i,j in global_tool_types.items():
-    for k in j['source_exts']:
-        global_ext_map[k] = i
+global_ext_map = {'msc':{},'gnu':{}}
+
+for t in ('msc','gnu'):
+    for i,j in global_tool_types[t].items():
+        for k in j['source_exts']:
+            global_ext_map[t][k] = i
 
 def select_tool_type(ext):
-    file_type = global_ext_map.get(ext)
+    file_type = global_ext_map[global_tool_set].get(ext)
     if file_type:
-        return global_tool_types[file_type]
+        return global_tool_types[global_tool_set][file_type]
     return None
 
 def _normalize_source_tuple(indata,base_dir,resolve_deps):
@@ -144,7 +268,10 @@ def _normalize_source_tuple(indata,base_dir,resolve_deps):
     target = os.path.normpath(target).replace('..'+os.sep,'@').replace(os.sep,'#')
     tool_type = select_tool_type(ext)
     target = target + tool_type['object-ext']
-    return (source,target,flags,deps,tool_type['maker'])
+    if global_tool_set != 'msc' and sys.platform == 'win32':
+        target = target.replace('\\','/')
+        source = source.replace('\\','/')
+    return (source,flags,deps,target,tool_type['maker'])
 
 def normolize_sources(sources,basedir,resolve_deps=(False,[])):
     """sources - list of sources or tuples(source,[flags],[deps])
@@ -153,16 +280,18 @@ def normolize_sources(sources,basedir,resolve_deps=(False,[])):
        flags_set - set of flags for building tools"""
     return [_normalize_source_tuple(i,basedir,resolve_deps) for i in sources]
 
-def compile_files(sources,tempdir):
+def compile_files(sources,tempdir,com_flags=[]):
     objects = []
     if not os.path.exists(tempdir):
         os.makedirs(tempdir)
     for source_data in sources:
-        if type(source_data) == type(''):
+        if type(source_data) == type('') or len(source_data) < 4:
             source_data = _normalize_source_tuple(source_data,'.',(None,[]))
-        source,target,flags,deps,tool = source_data
+        source,flags,deps,target,tool = source_data
         target = os.path.join(tempdir,target)
-        objects.append(tool(source,target,flags,deps))
+        if global_tool_set != 'msc' and sys.platform == 'win32':
+            target = target.replace('\\','/')
+        objects.append(tool(source,target,com_flags+flags,deps))
     return objects
 
 def _make_objects_list(objects,libs,tempdir,objectslist):
@@ -188,21 +317,99 @@ def _msc_link_file(objects,libs,tempdir,target,flags,cmd):
         fmtime = _make_objects_list(objects,libs,tempdir,objectslist)
         if not os.path.exists(target) or fmtime > os.stat(target)[stat.ST_MTIME]:
             cmd_S = (cmd+' -out:"%s" '%target)+' '.join(flags)+(' @"%s"'%objectslist)
-            print cmd_S
+            if global_verbose: print cmd_S
             if 0 != os.system( cmd_S ):
-                raise Exception('faile to link "%s"'%target)
-    elif global_build_operation == 'CLEAN':
-        if os.path.exists(target):
-            print 'unlink "%s"' % target
-            os.unlink(target)
+                raise Exception('failed to link "%s"'%target)
+    else:
+        try_clean_target(target)
+
+def _gnu_link_file(objects,libs,tempdir,target,flags):
+    if global_build_operation == 'BUILD':
+        objectslist = os.path.join(tempdir,"~objectslist~")
+        fmtime = _make_objects_list(objects,libs,tempdir,objectslist)
+        if not os.path.exists(target) or fmtime > os.stat(target)[stat.ST_MTIME]:
+            cmd_S = ('ld -o"%s" '%target)+' '.join(flags)+(' @"%s"'%objectslist)
+            if global_verbose: print cmd_S
+            if 0 != os.system( cmd_S ):
+                raise Exception('failed to link "%s"'%target)
+    else:
+        try_clean_target(target)
+
+def _gnu_lib_file(objects,libs,tempdir,target,flags):
+    if global_build_operation == 'BUILD':
+        objectslist = os.path.join(tempdir,"~objectslist~")
+        if not os.path.exists(tempdir):
+            os.makedirs(tempdir)
+        if os.path.exists(objectslist):
+            os.unlink(objectslist)
+        f = open(objectslist,"w+t")
+        f.write('CREATE "%s"\n'+target)
+        fmtime = 0
+        for i in objects:
+            f.write('ADDMOD "'+i+'"\n')
+            fmtime = max(os.stat(i)[stat.ST_MTIME],fmtime)
+        for i in libs:
+            f.write('ADDLIB "'+i+'"\n');
+            if os.path.exists(i):
+                fmtime = max(os.stat(i)[stat.ST_MTIME],fmtime)
+        f.write('SAVE\n');
+        f.close()
+        if not os.path.exists(target) or fmtime > os.stat(target)[stat.ST_MTIME]:
+            cmd_S = 'ar -M "%s"'%objectslist
+            if global_verbose: print cmd_S
+            if 0 != os.system( cmd_S ):
+                raise Exception('failed to link "%s"'%target)
+    else:
+        try_clean_target(target)
 
 def link_static(objects,tempdir,target,flags=[]):
     rel_flags = flags + global_flags_set['LIB_FLAGS'] + _select_flags_with_build_type('LIB_')
-    _msc_link_file(objects,[],tempdir,target,rel_flags,'lib')
+    if global_tool_set == 'msc':
+        _msc_link_file(objects,[],tempdir,target,rel_flags,'lib')
+    else:
+        _gnu_lib_file(objects,[],tempdir,target,rel_flags)
 
 def link_shared(objects,libs,tempdir,target,flags=[]):
     rel_flags = flags + global_flags_set['LINK_FLAGS'] + _select_flags_with_build_type('LINK_')
-    _msc_link_file(objects,libs,tempdir,target,rel_flags,'link')
+    if global_tool_set == 'msc':
+        _msc_link_file(objects,libs,tempdir,target,['-dll']+rel_flags,'link')
+    else:
+        _gnu_link_file(objects,libs,tempdir,target,['-shared']+rel_flags)
 
-def link_executable(objects,libs,tempdir,target,flags_set={}):
-    pass
+def link_executable(objects,libs,tempdir,target,flags=[]):
+    rel_flags = flags + global_flags_set['LINK_FLAGS'] + _select_flags_with_build_type('LINK_')
+    if global_tool_set == 'msc':
+        _msc_link_file(objects,libs,tempdir,target,rel_flags,'link')
+    else:
+        _gnu_link_file(objects,libs,tempdir,target,rel_flags)
+
+def get_jVal(name):
+    return global_j_vals.get(name,None)
+
+def do_safexec(cmd):
+    if global_verbose: print cmd
+    if 0 != os.system( cmd ):
+        raise Exception('failed with "%s"'%cmd)
+
+def add_global_flags_for_msvc(**k):
+
+    global_flags_set['C_FLAGS'] += ['-DWIN32','-D_WINDOWS','-D_WIN32_WINNT="0x0500"']
+
+    if global_build_type == 'RELEASE':
+        global_flags_set['C_FLAGS'] += ['-Ox', '-Os', '-Oi', '-Ob2', '-Oy-', '-Gy', '-GF']
+    else:
+        if not k.get('no_debug'):
+            global_flags_set['C_FLAGS'] += ['-D_DEBUG', '-Od', '-Zi']
+
+    if k.get('no_throw'): global_flags_set['C_FLAGS'] += ['-EHs-c-', '-GR-']
+
+    if k.get('static'):
+        if global_build_type == 'RELEASE':
+            global_flags_set['C_FLAGS'] += ['-MT']
+        else:
+            global_flags_set['C_FLAGS'] += ['-MTd']
+    else:
+        if global_build_type == 'RELEASE':
+            global_flags_set['C_FLAGS'] += ['-MD']
+        else:
+            global_flags_set['C_FLAGS'] += ['-MDd']
