@@ -2,10 +2,10 @@
 # -*- coding: cp1251 -*-
 #
 # (c)2008, Alexey Sudachen, alexey@sudachen.name
-# http://www.ethical-hacker.info/jungle
+# http://www.ethical-hacker.info/py2cc
 #
 
-version = "3.0"
+version = "1.0"
 
 import sys,os,os.path,getopt,marshal,locale
 from modulefinder import *
@@ -17,7 +17,7 @@ flags = { \
     'addpath':[],
     'exclude':[],
     'depth':1,
-    'cc':'gnu',
+    'cc':'msc',
     }
 
 flags['exclude'].extend(['os2emxpath','macpath','ce','riscos','riscospath'])
@@ -28,13 +28,17 @@ elif sys.platform.startswith('linux'):
     pass
 
 
-usage_msg = """jungle [options] main_python_file.py
+usage_msg = """py2cc [options] main_python_file.py
 
 -p <path of modules separated by '"""+os.pathsep+"""'>
 -x <excluded module name>
 -l <shared object/dynamic library name> current python2x by default
--r <precompiled runtime modules> 'jungle.Z' by default
 -f "<compiler flags>"
+
+-L link with pycrt.dll (like -lpycrt)
+-S link with pycrtS.lib
+-Z compress modules with embedded LZSS
+-z compress modules with external ZLib
 
 --verbose   verbose compilation process
 --no-logo   hide copyright logo
@@ -43,15 +47,21 @@ usage_msg = """jungle [options] main_python_file.py
 --single    compile only main file
 --local     compile if in script folder (*default)
 --all       compile all dependenses
+"""
 
+if sys.platform == 'win32':
+    usage_msg = usage_msg + """
 microsoft windows specific:
 --rc <rcfile.RC>
---cc <gnu|ms>[,"compiler.exe-path"] """+flags['cc']+""" by default
+--cc <gnu|msc>[,"compiler.exe-path"] """+flags['cc']+""" by default
+--msc       equal to --cc msc
+--gnu       equal to --cc gnu
 --windows   make executable for subsystem 'windows'
 --console   make executable for subsystem 'console' (*defult)
 """
 
 #--no-python disable to find & append path of installed python modules
+#-r <precompiled runtime modules> 'pycrt.Z' by default
 
 class ErrorMessageException(Exception):
     pass
@@ -60,7 +70,7 @@ def GetMyOpts(a):
     try:
         return getopt.getopt(
               a,
-              'o:p:x:l:r:f:?hvVZ',
+              'o:p:x:l:r:f:?hvVZzLS',
               ['no-python',
                'no-logo',
                'no-main',
@@ -76,6 +86,8 @@ def GetMyOpts(a):
                'single',
                'local',
                'all',
+               'msc',
+               'gnu',
                'cc=',
                'print-version'])
     except getopt.error:
@@ -132,6 +144,10 @@ def OperateWithOpts(opts,flags):
                 a = a[:i]
             flags['cc'] = a
             if cc_path: flags['cc-path'] = cc_path
+        if o == '--msc':
+            flags['cc'] = 'msc'
+        if o == '--gnu':
+            flags['cc'] = 'gnu'
         if o == '--single':
             flags['depth'] = 0
         if o == '--local':
@@ -140,6 +156,11 @@ def OperateWithOpts(opts,flags):
             flags['depth'] = 2
         if o == '-Z':
             flags['compress'] = True
+        if o == '-S':
+            flags['python'] = 'pycrtS'
+            flags['static'] = True
+        if o == '-L':
+            flags['python'] = 'pycrt'
         if o == '--print-version' or o == '-V':
             print version
             sys.exit(0)
@@ -211,7 +232,7 @@ def Compile(files,path,exclude,debug,no_main,depth,C_file):
     return compiled
 
 def FreezeTable(compiled,C_file):
-    C_file.write("\nstatic struct {char*_1;char*_2;int _3;} _Jungle_Modules[] = {\n")
+    C_file.write("\nstatic struct {char*_1;char*_2;int _3;} _py2cc_Modules[] = {\n")
     for i in compiled: C_file.write("{\"%s\",_S_%s,%d},\n" % (i[1],i[0],i[2]) )
     C_file.write("{0,0,0}};\n")
 
@@ -253,10 +274,13 @@ def Main(script,sys_argv):
     opts, args = GetMyOpts(sys_argv)
     OperateWithOpts(opts,flags)
 
+    script_dir = os.path.dirname(script)
+    if not script_dir: script_dir = sys.prefix
+
     if not flags.get('no-logo'):
         print ".Py Compiler "+version+" - the .py to .exe compiler"
         print "(c)2008, Alexey Sudachen, alexey@sudachen.name"
-        print "http://www.ethical-hacker.com/jungle"
+        print "http://www.ethical-hacker.com/py2cc"
         print "~\n"
 
     if not args:
@@ -296,18 +320,19 @@ def Main(script,sys_argv):
 
     if not flags.get('c-only') and not flags.get('no-main'):
         if sys.platform == 'win32':
-            flags['c-flags'] = flags.get('c-flags','') + ' -D_JUNGLE_ON_WINDOWS'
+            flags['c-flags'] = flags.get('c-flags','') + ' -D_PY2CC_ON_WINDOWS'
         else:
-            flags['c-flags'] = flags.get('c-flags','') + ' -D_JUNGLE_ON_POSIX'
+            flags['c-flags'] = flags.get('c-flags','') + ' -D_PY2CC_ON_POSIX'
 
         if flags.get('python'):
-            if flags['cc'] == 'ms':
+            if flags['cc'] == 'msc':
                 python_lib = flags['python']+'.lib'
+                os.putenv('LIB',script_dir+'\\..\\lib;'+os.environ['LIB'])
             else:
-                python_lib = '-l'+flags['python']
+                python_lib = '-l'+flags['python']+' -L'+script_dir+'/../lib'
         else:
             if sys.platform == 'win32':
-                if flags['cc'] == 'ms':
+                if flags['cc'] == 'msc':
                     python_lib = os.path.join(sys.exec_prefix,'libs','python%d%d.lib'%sys.version_info[:2])
                 else:
                     python_lib = '-L"'+os.path.join(sys.exec_prefix,'libs')+'" -lpython%d%d'%sys.version_info[:2]
@@ -315,24 +340,27 @@ def Main(script,sys_argv):
                 python_lib = '-lpython%d.%d'%sys.version_info[:2]
 
         if flags['subsystem'] == 'windows' and sys.platform == 'win32':
-            flags['c-flags'] = flags['c-flags']+ ' -D_JUNGLE_WINDOWS_SUBSYSTEM'
+            flags['c-flags'] = flags['c-flags']+ ' -D_PY2CC_WINDOWS_SUBSYSTEM'
         else:
-            flags['c-flags'] = flags['c-flags']+ ' -D_JUNGLE_CONSOLE_SUBSYSTEM'
+            flags['c-flags'] = flags['c-flags']+ ' -D_PY2CC_CONSOLE_SUBSYSTEM'
 
-        if flags['cc'] == 'ms' and sys.platform == 'win32':
+        if flags['cc'] == 'msc' and sys.platform == 'win32':
             CC = flags.get('cc-path','cl')
             libs = [
               'user32.lib',
               'advapi32.lib',
               'shell32.lib',
-              #'ole32.lib',
-              #'oleaut32.lib',
+              'ole32.lib',
+              'oleaut32.lib',
               'gdi32.lib',
               'ws2_32.lib']
-            cmd_S = '%s %s "%s" -o "%s" "%s" '% (CC,flags['c-flags'],C_file_name,output_name,python_lib) + ' '.join(libs)
+            c_flags =  ' -MD' + flags['c-flags']
+            if flags.get('static'):
+                c_flags = c_flags + ' -D_PY2CC_STATIC'
+            cmd_S = '%s %s "%s" -o "%s" "%s" '% (CC,c_flags,C_file_name,output_name,python_lib) + ' '.join(libs)
         else:
             CC = flags.get('cc-path','gcc')
-            cmd_S = '%s %s "%s" -o "%s" %s' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
+            cmd_S = '%s %s "%s" -s -o "%s" %s' % (CC,flags['c-flags'],C_file_name,output_name,python_lib)
 
         print cmd_S
         if os.system(cmd_S) != 0 :
@@ -341,10 +369,11 @@ def Main(script,sys_argv):
 frozen_header = """
 /*
 
-  This source file was generated with Jungle
-  Jungle .Py Compiler available at http://www.ethical-hacker.info/jungle
+  This source file was generated with py2cc
+  py2cc '.Py to .C & Compile'
+  http://www.ethical-hacker.info/py2cc
 
-  On *NIX:  gcc -D_JUNGLE_ON_POSIX <source_C> -o <binary> -lpython2x
+  On *NIX:  gcc -D_PY2CC_ON_POSIX <source_C> -o <binary> -lpython2x
 
 */
 
@@ -355,13 +384,13 @@ frozen_main = """
 #include <malloc.h>
 #include <string.h>
 
-#if defined _WIN32
+#if defined _WIN32 && !defined _PY2CC_STATIC
 #define DLL_IMPORT __declspec(dllimport)
 #else
 #define DLL_IMPORT
 #endif
 
-/*extern struct _frozen _Jungle_Modules[];*/
+/*extern struct _frozen _py2cc_Modules[];*/
 struct _frozen { char *name; unsigned char *code; int size; };
 
 DLL_IMPORT extern struct _frozen *PyImport_FrozenModules;
@@ -385,7 +414,7 @@ static j_init_frozen_table()
   {
     if ( !frozen_table_count )
       {
-        struct _frozen *i = (struct _frozen*)_Jungle_Modules;
+        struct _frozen *i = (struct _frozen*)_py2cc_Modules;
         PyImport_FrozenModules = i;
         while ( i->name ) ++frozen_table_count, ++i;
       }
@@ -452,8 +481,8 @@ int j_frozen_main_1(int argc, char **argv)
 
     j_init_frozen_table();
 
-#if defined _JUNGLE_USE_RUNTIME
-    Z_frozen = j_access_runtime(_JUNGLE_USE_RUNTIME);
+#if defined _PY2CC_USE_RUNTIME
+    Z_frozen = j_access_runtime(_PY2CC_USE_RUNTIME);
 
     if ( Z_frozen )
       {
@@ -481,9 +510,9 @@ int j_frozen_main_1(int argc, char **argv)
 
 static char **j_buildargv(char *input,int *count);
 
-#if defined _JUNGLE_ON_POSIX || defined _JUNGLE_CONSOLE_SUBSYSTEM
+#if defined _PY2CC_ON_POSIX || defined _PY2CC_CONSOLE_SUBSYSTEM
 int main(int argc,char **argv)
-#elif defined _JUNGLE_ON_WINDOWS && defined _JUNGLE_WINDOWS_SUBSYSTEM
+#elif defined _PY2CC_ON_WINDOWS && defined _PY2CC_WINDOWS_SUBSYSTEM
 char *__stdcall GetCommandLineA();
 int __stdcall WinMain(int _0,int _1,int _2,int _3)
 #else
@@ -491,7 +520,7 @@ int __stdcall WinMain(int _0,int _1,int _2,int _3)
 #endif
   {
     int sts = 0;
-#if defined _JUNGLE_ON_WINDOWS && defined _JUNGLE_WINDOWS_SUBSYSTEM
+#if defined _PY2CC_ON_WINDOWS && defined _PY2CC_WINDOWS_SUBSYSTEM
     int argc = 0;
     char **argv = j_buildargv( GetCommandLineA(), &argc );
 #endif
@@ -583,7 +612,7 @@ static char *j_jjlz_decompressor(unsigned char *in_b, int *inout_len)
 """
 
 build_argv = """
-#if defined _JUNGLE_ON_WINDOWS && defined _JUNGLE_WINDOWS_SUBSYSTEM
+#if defined _PY2CC_ON_WINDOWS && defined _PY2CC_WINDOWS_SUBSYSTEM
 
 static void j_freeargv(char **vector)
   {

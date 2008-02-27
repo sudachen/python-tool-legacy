@@ -1,5 +1,5 @@
 
-import os, os.path, sys
+import os, os.path, sys, shutil
 
 sys.path.append('../../packages')
 from make import *
@@ -26,7 +26,7 @@ CC_flags = [
         '-I"%s/Include"'%python_base,
         '-I"%s/Python"'%python_base,
         '-I"%s/Modules/expat"'%python_base,
-        '-D"-Py_NO_ENABLE_SHARED"',
+        '-D"Py_NO_ENABLE_SHARED"',
         ]
 CC_flags.append('-nologo')
 CC_flags.append('-I../../Include/zlib')
@@ -167,6 +167,7 @@ objects = compile_files(sources,tempdir)
 objects += compile_files(['config.c'],tempdir)
 
 linker_flags = [
+    '-nologo',
     '-incremental:no',
     '-release',
     '-debug',
@@ -195,3 +196,13 @@ libs = [
 
 link_shared(objects,libs,tempdir,'../../bin/pycrt.dll')
 link_static(objects+['../../lib/zS.lib'],tempdir,'../../lib/pycrtS.lib')
+
+if sys.platform == 'win32':
+    target = '../../bin/py2cc.py'
+else:
+    target = '../../bin/py2cc'
+
+if os.path.exists(target):
+    os.unlink(target)
+shutil.copyfile('py2cc.py',target)
+os.chmod(target,0755)

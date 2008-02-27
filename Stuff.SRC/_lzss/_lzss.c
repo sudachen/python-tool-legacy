@@ -312,9 +312,6 @@ C_STATIC PyMethodDef lzss_funcs[] =
     {0,0,0,0},
   };
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
 void init_lzss()
   {
     Py_InitModule("_lzss", lzss_funcs);
