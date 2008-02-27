@@ -75,6 +75,8 @@ extern void init_socket(void);
 extern void initselect(void);
 extern void initunicodedata(void);
 
+extern void init_lzss(void);
+
 struct _inittab _PyImport_Inittab[] = {
 //#ifdef _BUILD_SCRAFTE
 //        {"_scrafte", init_scrafte},
@@ -84,6 +86,7 @@ struct _inittab _PyImport_Inittab[] = {
 //#endif
 //        {"pyteggo2", initpyteggo2},
 //        {"_vfs", init_vfs},
+        {"_lzss",init_lzss},
         {"zlib", initzlib},
         {"pyexpat",initpyexpat},
         {"array", initarray},

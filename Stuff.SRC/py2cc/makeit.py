@@ -1,19 +1,19 @@
 
 import os, os.path, sys
 
-sys.path.append('../packages')
-from mscmake import *
+sys.path.append('../../packages')
+from make import *
 
 process_command_line();
 
-tempdir = os.path.abspath('../../~temp~/jungle3-' + get_build_type())
-python_base = '../../Python/2.4.4'
-#os.putenv('LIB','../../Python'+';'+os.environ['LIB'])
-os.putenv('LIB','.'+';'+os.environ['LIB'])
+tempdir = os.path.abspath('../../../~temp~/pycrt' + get_build_type())
+python_base = '../../2.4.4'
+os.putenv('LIB','.'+';'+'../../lib'+';'+os.environ['LIB'])
 
 CC_flags = [
         '-MD',
         '-Ox',
+        '-Z7',
         '-DPyMODINIT_FUNC=void',
         '-DUSE_DL_EXPORT',
         '-DXML_STATIC',
@@ -22,13 +22,14 @@ CC_flags = [
         '-DNDEBUG',
         '-D_WINDOWS',
         '-I"%s/PC"'%python_base,
+        '-I"../../"',
         '-I"%s/Include"'%python_base,
-        '-I"%s/Python"' %python_base,
-        '-I"%s/Modules/expat"' %python_base,
+        '-I"%s/Python"'%python_base,
+        '-I"%s/Modules/expat"'%python_base,
         '-D"-Py_NO_ENABLE_SHARED"',
         ]
 CC_flags.append('-nologo')
-CC_flags.append('-I../../Media/lib.z')
+CC_flags.append('-I../../Include/zlib')
 global_flags_set['C_FLAGS'] = CC_flags
 
 sources = [
@@ -158,7 +159,10 @@ sources = [
     'Python/dynload_win.c',
     'PC/dl_nt.c',
     ]
+
 sources = normolize_sources(sources,python_base)
+sources += ['../_lzss/_lzss.c']
+
 objects = compile_files(sources,tempdir)
 objects += compile_files(['config.c'],tempdir)
 
@@ -167,14 +171,13 @@ linker_flags = [
     '-release',
     '-debug',
     '-dll',
-    '-map',
     '-opt:ref',
     '-opt:icf',
-    '-def:jungle.def',
+    '-def:pycrt.def',
     '-base:0x3200000',
     '-libpath:.',
-    '-pdb:jungle.pdb',
-    '-implib:./jungle3.lib',
+    '-pdb:../../bin/pycrt.pdb',
+    '-implib:../../lib/pycrt.lib',
     ]
 global_flags_set['LINK_FLAGS'] = linker_flags
 
@@ -187,8 +190,8 @@ libs = [
     'oleaut32.lib',
     'gdi32.lib',
     'ws2_32.lib',
-    'z.lib',
+    'zS.lib',
     ]
 
-link_shared(objects,libs,tempdir,'jungle3.dll')
-link_static(objects+['z.lib'],tempdir,'jungle3s.lib')
+link_shared(objects,libs,tempdir,'../../bin/pycrt.dll')
+link_static(objects+['../../lib/zS.lib'],tempdir,'../../lib/pycrtS.lib')
