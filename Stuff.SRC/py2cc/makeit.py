@@ -22,7 +22,7 @@ CC_flags = [
         '-DNDEBUG',
         '-D_WINDOWS',
         '-I"%s/PC"'%python_base,
-        '-I"../../"',
+        '-I"../../Include"',
         '-I"%s/Include"'%python_base,
         '-I"%s/Python"'%python_base,
         '-I"%s/Modules/expat"'%python_base,
