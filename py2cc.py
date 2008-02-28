@@ -278,7 +278,7 @@ def Main(script,sys_argv):
     if not script_dir: script_dir = sys.prefix
 
     if not flags.get('no-logo'):
-        print ".Py Compiler "+version+" - the .py to .exe compiler"
+        print "py2cc "+version+" - .Py to .C & Compile"
         print "(c)2008, Alexey Sudachen, alexey@sudachen.name"
         print "http://www.ethical-hacker.com/py2cc"
         print "~\n"
