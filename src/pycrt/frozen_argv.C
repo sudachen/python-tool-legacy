@@ -1,5 +1,6 @@
+#if defined _PY2CC_ON_WINDOWS && defined _PY2CC_WINDOWS_SUBSYSTEM
 
-static void j_freeargv (char **vector)
+static void j_freeargv(char **vector)
   {
     char **scan;
     if (vector != NULL)
@@ -10,7 +11,7 @@ static void j_freeargv (char **vector)
   }
 
 #define ISBLANK(a) ((a) == ' ' || (a) == '\t')
-static char **j_buildargv(const char *input,int *_argc)
+static char **j_buildargv(char *input, int *_argc)
   {
 
     enum {EOS=0,INITIAL_MAXARGC=128};
@@ -79,7 +80,7 @@ static char **j_buildargv(const char *input,int *_argc)
                       }
                     else if (squote)
                       {
-                        if (*input == '\'') squote = 0;
+                        if (*input == '\\'') squote = 0;
                         else *arg++ = *input;
                       }
                     else if (dquote)
@@ -89,9 +90,9 @@ static char **j_buildargv(const char *input,int *_argc)
                       }
                     else
                       {
-                        if (*input == '\'') squote = 1;
+                        if (*input == '\\'') squote = 1;
                         else if (*input == '"') dquote = 1;
-                        else *arg++ = *input; 
+                        else *arg++ = *input;
                       }
                     input++;
                   }
@@ -100,7 +101,7 @@ static char **j_buildargv(const char *input,int *_argc)
             argv[argc] = strdup (copybuf);
             if (argv[argc] == NULL)
               {
-                freeargv (argv);
+                j_freeargv (argv);
                 argv = NULL;
                 break;
               }
