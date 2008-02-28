@@ -1,7 +1,7 @@
 
 import os, os.path, sys, shutil
 
-sys.path.append('../../packages')
+sys.path.append('../../lib')
 from make import *
 
 process_command_line();
@@ -9,6 +9,9 @@ process_command_line();
 tempdir = os.path.abspath('../../../~temp~/pycrt' + get_build_type())
 python_base = '../../2.4.4'
 os.putenv('LIB','.'+';'+'../../lib'+';'+os.environ['LIB'])
+
+Platform = sys.platform
+if Platform != 'win32': Platform = 'posix'
 
 CC_flags = [
         '-MD',
@@ -22,7 +25,7 @@ CC_flags = [
         '-DNDEBUG',
         '-D_WINDOWS',
         '-I"%s/PC"'%python_base,
-        '-I"../../Include"',
+        '-I"../../Include/'+Platform+'"',
         '-I"%s/Include"'%python_base,
         '-I"%s/Python"'%python_base,
         '-I"%s/Modules/expat"'%python_base,
@@ -177,7 +180,7 @@ linker_flags = [
     '-def:pycrt.def',
     '-base:0x3200000',
     '-libpath:.',
-    '-pdb:../../bin/pycrt.pdb',
+    '-pdb:../../pycrt.pdb',
     '-implib:../../lib/pycrt.lib',
     ]
 global_flags_set['LINK_FLAGS'] = linker_flags
@@ -194,15 +197,5 @@ libs = [
     'zS.lib',
     ]
 
-link_shared(objects,libs,tempdir,'../../bin/pycrt.dll')
+link_shared(objects,libs,tempdir,'../../pycrt.dll')
 link_static(objects+['../../lib/zS.lib'],tempdir,'../../lib/pycrtS.lib')
-
-if sys.platform == 'win32':
-    target = '../../bin/py2cc.py'
-else:
-    target = '../../bin/py2cc'
-
-if os.path.exists(target):
-    os.unlink(target)
-shutil.copyfile('py2cc.py',target)
-os.chmod(target,0755)
