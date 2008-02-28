@@ -327,9 +327,9 @@ def Main(script,sys_argv):
         if flags.get('python'):
             if flags['cc'] == 'msc':
                 python_lib = flags['python']+'.lib'
-                os.putenv('LIB',script_dir+'\\..\\lib;'+os.environ['LIB'])
+                os.putenv('LIB',script_dir+'\\lib;'+os.environ['LIB'])
             else:
-                python_lib = '-l'+flags['python']+' -L'+script_dir+'/../lib'
+                python_lib = '-l'+flags['python']+' -L'+script_dir+'/lib'
         else:
             if sys.platform == 'win32':
                 if flags['cc'] == 'msc':
