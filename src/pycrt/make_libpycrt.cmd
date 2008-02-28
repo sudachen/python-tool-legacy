@@ -1,0 +1,1 @@
+dlltool -d pycrt.def -D pycrt.dll -l ../../lib/libpycrt.a
