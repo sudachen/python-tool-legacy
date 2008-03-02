@@ -258,8 +258,6 @@ class PEfile(object):
             if mem:
                 details.unmmap_file(mem)
             raise
-        self._syms = {}
-        self._sym_by_address = {}
 
     def close(self):
         if self._basemem:
@@ -325,7 +323,9 @@ class PEfile(object):
             i = IMAGE_IMPORT_DESCRIPTOR.from_address(p)
             while i.OriginalFirstThunk:
                 name = c_char_p(self.fix_RVA(i.Name)).value
-                l.append( (name, self.fix_RVA(i.FirstThunk), self.get_image_base()+i.FirstThunk) )
+                j = i.OriginalFirstThunk
+                if not j: j = i.FirstThunk
+                l.append( (name, self.fix_RVA(j), self.get_image_base()+i.FirstThunk) )
                 p += sizeof(IMAGE_IMPORT_DESCRIPTOR)
                 i = IMAGE_IMPORT_DESCRIPTOR.from_address(p)
         return l
@@ -334,41 +334,19 @@ class PEfile(object):
         l = []
         imports = self.get_imports()
         for n,p,f in imports:
+            lf = []
             n = os.path.splitext(n)[0]
             p = cast(p,POINTER(DWORD)); i = 0
             while p[i]:
                 a = p[i]
                 if a & 0x80000000:
-                    l.append((n,'#%d'%(a&0x0ffff),i*4+f))
+                    lf.append(('#%d'%(a&0x0ffff),i*4+f))
                 else:
                     a = cast(self.fix_RVA(a)+2,c_char_p)
-                    l.append((n,a.value,i*4+f))
+                    lf.append((a.value,i*4+f))
                 i += 1
+            l.append((n,lf))
         return l
-
-
-    def make_symbols_table(self):
-        for fn_name,addr in self.enumerate_exports():
-            self._syms[fn_name] = addr
-            self._sym_by_address[addr] = fn_name
-        for dll_name,fn_name,addr in self.enumerate_imports():
-            self._syms[dll_name+'!'+fn_name] = addr
-            self._sym_by_address[addr] = dll_name+'!'+fn_name
-
-    def find_symbol(self,addr):
-        return self._sym_by_address.get(addr,None)
-
-    def find_symbol_address(self,sym):
-        addr = None
-        if not addr:
-            addr = self._syms.get(sym)
-        return addr
-
-    def find_symbol_sec_and_offset(self,sym):
-        addr = self.find_symbol(sym)
-        if addr:
-            return self.find_section_and_offset(addr)
-        return None
 
     def get_entry_point(self):
         return self.get_image_base()+self.nt_headers.OptionalHeader.AddressOfEntryPoint
@@ -378,6 +356,12 @@ class PEfile(object):
 
     def find_section_and_offset(self,addr):
         return self.find_section_and_offset_by_RVA(addr-self.get_image_base())
+
+    def addr_of_fOFFSET(self,p):
+        for sect in self.get_sections():
+            if p >= sect.PointerToRawData and p < sect.PointerToRawData+sect.SizeOfRawData:
+                return (p-sect.PointerToRawData)+sect.VirtualAddress+self.get_image_base()
+        return None
 
     def find_section_and_offset_by_mem(self,addr):
         p = addr-self._basemem
@@ -390,7 +374,7 @@ class PEfile(object):
         sect = self.find_section_by_RVA(rva)
         if sect:
             return (sect,rva-sect.VirtualAddress)
-        return (None,addr)
+        return (None,rva)
 
     #
     # header printing
