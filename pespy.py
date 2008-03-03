@@ -27,6 +27,18 @@ CMD_DISASSEMBLE         = 1
 CMD_IMPORTS             = 2
 CMD_IMPORTS_FUNCS       = 3
 CMD_EXPORTS             = 4
+CMD_QUICK_HEADERS       = 5
+CMD_FULL_HEADERS        = 6
+CMD_SHOW_SECTIONS       = 7
+CMD_SHOW_DIRECTORY      = 8
+CMD_DECSRIBE            = 20
+CMD_DECSRIBE_BYTE       = 21
+CMD_DECSRIBE_WORD       = 22
+CMD_DECSRIBE_DWORD      = 23
+CMD_DECSRIBE_QWORD      = 24
+CMD_DECSRIBE_STRING     = 25
+CMD_DECSRIBE_UNICODE    = 26
+
 flags = None
 
 class Symbols:
@@ -66,9 +78,9 @@ def process_arguments(argv):
         'skip-lines':0,
         'disasm-level':0,
         'disasm-addr-format':F_ABSOLUTE_ADDRESS,
-        'command':CMD_NONE,
+        'command':CMD_QUICK_HEADERS,
         }
-    opts,args = getopt.getopt(argv,'L:F:O:H:h?V',['intel','att'])
+    opts,args = getopt.getopt(argv,'L:F:O:H:X:D:h?V',['intel','att'])
     for i,j in opts:
         if i == '--intel': flags['syntax'] = 'intel'
         if i == '--att': flags['syntax'] = 'att'
@@ -124,6 +136,35 @@ def process_arguments(argv):
                 flags['command'] = CMD_IMPORTS_FUNCS
             if j == 'e':
                 flags['command'] = CMD_EXPORTS
+            if j == 'q':
+                flags['command'] = CMD_QUICK_HEADERS
+            if j == 'x':
+                flags['command'] = CMD_FULL_HEADERS
+
+        if i == '-X':
+            if j == 'f':
+                flags['command'] = CMD_DESCRIBE
+            if len(j):
+                if j[0] == 'b':
+                    flags['command'] = CMD_DESCRIBE_BYTES
+                    j = j[1:]
+                elif j[0] == 'w':
+                    flags['command'] = CMD_DESCRIBE_WORDS
+                    j = j[1:]
+                elif j[0] == 'd':
+                    flags['command'] = CMD_DESCRIBE_DWORDS
+                    j = j[1:]
+                elif j[0] == 'q':
+                    flags['command'] = CMD_DESCRIBE_QWORDS
+                    j = j[1:]
+                elif j[0] == 'a':
+                    flags['command'] = CMD_DESCRIBE_STRING
+                    j = j[1:]
+                elif j[0] == 'u':
+                    flags['command'] = CMD_DESCRIBE_UNICODE
+                    j = j[1:]
+            if len(j):
+                flags['data-count'] = safe_int(j,0)
 
     return args
 
@@ -365,6 +406,106 @@ def show_exports(args):
             continue
         print '%08x| %s'%(normalize_address(a,pef),n)
 
+def show_quick_headers(args):
+    pef = pecoff.PEfile(args[0])
+    o = pef.nt_headers.OptionalHeader
+    f = pef.nt_headers.FileHeader
+
+    eps,epf = pef.find_section_and_offset(o.AddressOfEntryPoint+o.ImageBase)
+
+    def format_subsys(x):
+        if not x: return 'unknown'
+        if x == 1: return 'native'
+        if x == 2: return 'windows'
+        if x == 3: return 'console'
+        if x == 7: return 'posix'
+        return str(x)
+
+    fields = [
+        ('LINKER','%d.%d'%(o.MajorLinkerVersion,o.MinorLinkerVersion)),
+        #('ENTRYPOINT','%08x/%s'%(o.AddressOfEntryPoint+o.ImageBase,eps.Name)),
+        ('ENTRYPOINT','%08x'%(o.AddressOfEntryPoint)),
+        ('IMAGEBASE','%08x'%o.ImageBase),
+        ('ALIGNMENT','%x/%x'%(o.SectionAlignment,o.FileAlignment)),
+        ('SUBSYTEM','%s'%format_subsys(o.Subsystem)),
+        ('IMAGESIZE','%08x'%o.SizeOfImage),
+        ('HEADERSIZE','%08x'%o.SizeOfHeaders),
+        ('CHECKSUM','%08x'%o.CheckSum),
+        ('STACKSIZE','%x/%x'%(o.SizeOfStackCommit,o.SizeOfStackReserve)),
+        ('HEAPSIZE','%x/%x'%(o.SizeOfHeapCommit,o.SizeOfHeapReserve)),
+        ]
+
+    fields = [ ('%'+str(max(map(lambda x: len(x[0]),fields)))+'s: %s')%i for i in fields ]
+
+    def fromat_flags(x):
+        l = []
+        if x & 0x0001 : l.append('FIXED')
+        if x & 0x0002 and not x & 0x2000: l.append('EXECUTABLE')
+        #if x & 0x0010 : l.append('trim the working set')
+        #if x & 0x0020 : l.append('more then 2G')
+        if x & 0xc00  : l.append('SWAPPED')
+        if x & 0x4000 : l.append('UNIPROCESSOR')
+        if x & 0x2000 : l.append('DLL')
+        if l: l = ['.'] + l
+        return l
+
+    fields += fromat_flags(f.Characteristics)
+
+    def format_access(x):
+        x = x >> 24 & ~0x040
+        if x & 0x0f0 == 0x080: return 'W'
+        if x & 0x0f0 == 0x0a0: return 'X'
+        if x & 0x0f0 == 0x020: return 'E'
+        return 'R'
+
+    sects = [
+        (   format_access(i.Characteristics),
+            i.Name,
+            '%x(%x..%x)' % (i.VirtualAddress,
+                i.VirtualAddress+pef.get_image_base(),
+                i.VirtualAddress+pef.get_image_base()+i.VirtualSize),
+            '%x/%x' % (i.PointerToRawData, i.SizeOfRawData) )
+            for i in pef.get_sections()
+        ]
+
+    sects = map(lambda x: \
+        ("%s %"+\
+            str(max(map(lambda x:len(x[1]),sects)))\
+            +"s: %"+\
+            str(max(map(lambda x:len(x[2]),sects)))\
+            +"s <= %s") %x, sects)
+
+    imports = ['%s/%d' % (i[0].lower(),len(i[1])) for i in pef.enumerate_imports()]
+    imports.sort()
+    if len(imports) % 3: imports += ['']* (3-len(imports)%3)
+    k = str(max(map(len,imports)))
+    imports = [
+        ("%-"+k+"s  %-"+k+"s  %s")%(imports[i],imports[i+1],imports[i+2])
+        for i in range(0,len(imports),3) ]
+
+    sects += ['----------------------------------------']
+    sects += imports
+
+    sects = ["starting at %08x ('%s'+%x)" % (o.AddressOfEntryPoint+o.ImageBase,eps.Name,epf),
+             '----------------------------------------'] + sects
+
+    sects += ['----------------------------------------']
+
+    for i,j in [('IMPORT','IMPORTS:'),('EXPORT','EXPORTS:'),('BASERELOC','RELOCS: ')]:
+        if o.DataDirectory[pecoff.__dict__['IMAGE_DIRECTORY_ENTRY_'+i]].VirtualAddress:
+            d = o.DataDirectory[pecoff.__dict__['IMAGE_DIRECTORY_ENTRY_'+i]]
+            s,f = pef.find_section_and_offset(d.VirtualAddress+o.ImageBase)
+            sects += [j+" %08x/%04x (%s+%04x)" % (d.VirtualAddress,d.Size,s.Name,f)]
+
+    def gen(x):
+        for i in x: yield i
+        while True: yield ''
+
+    k = str(max(map(len,fields)))
+    lgen = gen(fields); rgen = gen(sects)
+    for i in range(max(len(sects),len(fields))):
+        print ('%-'+k+'s | %s') % (lgen.next(),rgen.next())
+
 def main(script,argv):
 
     args = process_arguments(argv)
@@ -386,6 +527,8 @@ def main(script,argv):
         show_imports(args)
     elif c == CMD_IMPORTS_FUNCS:
         show_imports_funcs(args)
+    elif c == CMD_QUICK_HEADERS:
+        show_quick_headers(args)
 
 if __name__ == '__main__':
     main(sys.argv[0],sys.argv[1:])
