@@ -318,6 +318,7 @@ def _msc_link_file(objects,libs,tempdir,target,flags,cmd):
         objectslist = os.path.join(tempdir,"~objectslist~")
         fmtime = _make_objects_list(objects,libs,tempdir,objectslist)
         if not os.path.exists(target) or fmtime > os.stat(target)[stat.ST_MTIME]:
+            if os.path.exists(target): os.unlink(target)
             cmd_S = (cmd+' -out:"%s" '%target)+' '.join(flags)+(' @"%s"'%objectslist)
             if global_verbose: print cmd_S
             if 0 != os.system( cmd_S ):

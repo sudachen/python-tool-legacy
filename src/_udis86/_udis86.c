@@ -10,9 +10,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-#include "udis86.h"
+#include "./udis86.h"
 
-#define C_STATIC /*static*/
+#define C_STATIC static
 
 typedef void (*ud86_syntax_t)(ud_t*);
 

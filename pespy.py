@@ -1,9 +1,19 @@
+#!/usr/bin/python
+# -*- coding: cp1251 -*-
+"""
+(c)2008 Alexey Sudachen, alexey@sudachen.name
+http://www.ethical-hacker.info/
+"""
 
-import sys, os, os.path, getopt, binascii, re
-sys.path += [os.path.dirname(os.path.abspath(sys.argv[0]))+'/lib']
+import sys, os, os.path, getopt, binascii, re, _pycrt
+
+if not _pycrt.compiled:
+    sys.path = [os.path.dirname(os.path.abspath(sys.argv[0]))+'/lib'] + sys.path
 
 from binutils import pecoff
 from binutils import disasm
+
+version = "1.0"
 
 DEFAULT_LINES = 30
 F_ABSOLUTE_ADDRESS      = 0
@@ -58,10 +68,16 @@ def process_arguments(argv):
         'disasm-addr-format':F_ABSOLUTE_ADDRESS,
         'command':CMD_NONE,
         }
-    opts,args = getopt.getopt(argv,'L:F:O:H:',['intel','att'])
+    opts,args = getopt.getopt(argv,'L:F:O:H:h?V',['intel','att'])
     for i,j in opts:
         if i == '--intel': flags['syntax'] = 'intel'
         if i == '--att': flags['syntax'] = 'att'
+
+        if i in ('-?','-h'):
+            flags['show-help'] = True
+
+        if i == '-V':
+            flags['show-version'] = True
 
         if i == '-L':
             if j.startswith('r'):
@@ -314,7 +330,7 @@ def show_imports_funcs(args):
     mask = None
     pef = pecoff.PEfile(args[0])
     if len(args) > 1:
-        mask = re.compile(args[1])
+        mask = re.compile(args[1],re.IGNORECASE)
     for F,f in pef.enumerate_imports():
         b = False
         for n,a in f:
@@ -343,7 +359,7 @@ def show_exports(args):
     mask = None
     pef = pecoff.PEfile(args[0])
     if len(args) > 1:
-        mask = re.compile(args[1])
+        mask = re.compile(args[1],re.IGNORECASE)
     for n,a in pef.enumerate_exports():
         if mask and not mask.search(n):
             continue
@@ -352,11 +368,15 @@ def show_exports(args):
 def main(script,argv):
 
     args = process_arguments(argv)
-    if len(args) < 1:
-        print_author()
-        print_usage()
+    if flags.get('show-version'):
+        print version
         sys.exit(0)
-
+    if len(args) < 1 or flags.get('show-help'):
+        print 'PeSPY %s, (c)2008 Alexey Sudachen, alexey@sudachen.name' % version
+        print 'http://www.ethical-hacker.info/'
+        print '~\n'
+        print 'usage: PeSPY <command> [flags] <PEfile> [regexp]'
+        sys.exit(0)
     c = flags['command']
     if c == CMD_DISASSEMBLE:
         disasm_func(args)
@@ -367,4 +387,5 @@ def main(script,argv):
     elif c == CMD_IMPORTS_FUNCS:
         show_imports_funcs(args)
 
-main(sys.argv[0],sys.argv[1:])
+if __name__ == '__main__':
+    main(sys.argv[0],sys.argv[1:])

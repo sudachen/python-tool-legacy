@@ -9,8 +9,8 @@ The part of binutils package
 Microsoft PE/COFF structures
 """
 import sys, os, os.path
-from ctypes import Structure,Union,sizeof,c_char,c_byte,c_char_p,c_long,POINTER, cast
-from ctypes.wintypes import *
+from binutils.ctypes import Structure,Union,sizeof,c_char,c_byte,c_char_p,c_long,POINTER, cast
+from binutils.ctypes.wintypes import *
 
 import details
 
@@ -321,7 +321,7 @@ class PEfile(object):
         if imports_rva:
             p = self.fix_RVA(imports_rva)
             i = IMAGE_IMPORT_DESCRIPTOR.from_address(p)
-            while i.OriginalFirstThunk:
+            while i.FirstThunk and i.Name:
                 name = c_char_p(self.fix_RVA(i.Name)).value
                 j = i.OriginalFirstThunk
                 if not j: j = i.FirstThunk
