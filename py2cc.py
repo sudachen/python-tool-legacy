@@ -1,8 +1,8 @@
 #!/usr/bin/python
 # -*- coding: cp1251 -*-
 #
-# (c)2008, Alexey Sudachen, alexey@sudachen.name
-# http://www.ethical-hacker.info/py2cc
+# (c)2008 Alexey Sudachen, alexey@sudachen.name
+# http://www.ethical-hacker.info/
 #
 
 version = "1.0"
@@ -20,19 +20,19 @@ flags = { \
     'cc':'msc',
     }
 
-flags['exclude'].extend(['os2emxpath','macpath','ce','riscos','riscospath'])
+flags['exclude'].extend(['os2emxpath','macpath','ce','riscos','riscospath','_pycrt'])
 
 if sys.platform == 'win32':
     import _winreg
 elif sys.platform.startswith('linux'):
     pass
 
-
 usage_msg = """py2cc [options] main_python_file.py
 
 -p <path of modules separated by '"""+os.pathsep+"""'>
 -x <excluded module name>
 -l <shared object/dynamic library name> current python2x by default
+-s <static library name>
 -f "<compiler flags>"
 
 -L link with pycrt.dll (like -lpycrt)
@@ -156,6 +156,9 @@ def OperateWithOpts(opts,flags):
             flags['depth'] = 2
         if o == '-Z':
             flags['compress'] = True
+        if o == '-s':
+            flags['python'] = a
+            flags['static'] = True
         if o == '-S':
             flags['python'] = 'pycrtS'
             flags['static'] = True
@@ -256,6 +259,7 @@ def AppendPythonPath(ignore_python):
                             try:
                                 s,t = _winreg.QueryValueEx(hkey2,'')
                                 addpath.append(os.path.join(str(s),'Lib\\site-packages\\win32\\Lib'))
+                                addpath.append(os.path.join(str(s),'Lib\\site-packages'))
                             finally:
                                 _winreg.CloseKey(hkey2)
                         except:
@@ -279,8 +283,8 @@ def Main(script,sys_argv):
 
     if not flags.get('no-logo'):
         print "py2cc "+version+" - .Py to .C & Compile"
-        print "(c)2008, Alexey Sudachen, alexey@sudachen.name"
-        print "http://www.ethical-hacker.com/py2cc"
+        print "(c)2008 Alexey Sudachen, alexey@sudachen.name"
+        print "http://www.ethical-hacker.com/"
         print "~\n"
 
     if not args:
@@ -293,7 +297,9 @@ def Main(script,sys_argv):
     path.extend(sys.path)
     path.extend(flags['addpath'])
     path.extend(AppendPythonPath(flags.get('no-python')))
-    sys.path.extend(AppendPythonPath(False))
+    sys.path.extend(path)
+    #sys.path.extend(AppendPythonPath(False))
+    #print sys.path
 
     if flags.get('compress'):
         try:
@@ -354,7 +360,7 @@ def Main(script,sys_argv):
               'oleaut32.lib',
               'gdi32.lib',
               'ws2_32.lib']
-            c_flags =  ' -MD' + flags['c-flags']
+            c_flags =  ' -nologo -MD' + flags['c-flags']
             if flags.get('static'):
                 c_flags = c_flags + ' -D_PY2CC_STATIC'
             cmd_S = '%s %s "%s" -o "%s" "%s" '% (CC,c_flags,C_file_name,output_name,python_lib) + ' '.join(libs)
@@ -371,7 +377,7 @@ frozen_header = """
 
   This source file was generated with py2cc
   py2cc '.Py to .C & Compile'
-  http://www.ethical-hacker.info/py2cc
+  http://www.ethical-hacker.info/
 
   On *NIX:  gcc -D_PY2CC_ON_POSIX <source_C> -o <binary> -lpython2x
 
@@ -402,6 +408,7 @@ DLL_IMPORT extern int PyErr_Print();
 DLL_IMPORT extern int Py_Initialize();
 DLL_IMPORT extern int Py_Finalize();
 DLL_IMPORT extern int Py_FrozenFlag;
+DLL_IMPORT extern int Py_NoSiteFlag;
 DLL_IMPORT extern int Py_IgnoreEnvironmentFlag;
 DLL_IMPORT extern int Py_OptimizeFlag;
 
@@ -490,6 +497,7 @@ int j_frozen_main_1(int argc, char **argv)
       }
 #endif
 
+    Py_NoSiteFlag = 1;
     Py_FrozenFlag = 1; /* Suppress errors from getpath.c */
     Py_IgnoreEnvironmentFlag = 1;
     Py_OptimizeFlag = 1;
