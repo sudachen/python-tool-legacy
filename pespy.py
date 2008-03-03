@@ -406,20 +406,20 @@ def show_exports(args):
             continue
         print '%08x| %s'%(normalize_address(a,pef),n)
 
+def format_subsys(x):
+    if not x: return 'unknown'
+    if x == 1: return 'native'
+    if x == 2: return 'windows'
+    if x == 3: return 'console'
+    if x == 7: return 'posix'
+    return str(x)
+
 def show_quick_headers(args):
     pef = pecoff.PEfile(args[0])
     o = pef.nt_headers.OptionalHeader
     f = pef.nt_headers.FileHeader
 
     eps,epf = pef.find_section_and_offset(o.AddressOfEntryPoint+o.ImageBase)
-
-    def format_subsys(x):
-        if not x: return 'unknown'
-        if x == 1: return 'native'
-        if x == 2: return 'windows'
-        if x == 3: return 'console'
-        if x == 7: return 'posix'
-        return str(x)
 
     fields = [
         ('LINKER','%d.%d'%(o.MajorLinkerVersion,o.MinorLinkerVersion)),
@@ -506,6 +506,81 @@ def show_quick_headers(args):
     for i in range(max(len(sects),len(fields))):
         print ('%-'+k+'s | %s') % (lgen.next(),rgen.next())
 
+def show_full_headers(args):
+
+    pef = pecoff.PEfile(args[0])
+    o = pef.nt_headers.OptionalHeader
+    f = pef.nt_headers.FileHeader
+
+    def align(x,y):
+        return ((x + y -1 ) / y) * y
+
+    print 'OPTIONAL HEADER VALUES'
+    print '%16x magic' % o.Magic
+    print '%16s linker version' % ('%d.%d' % (o.MajorLinkerVersion,o.MinorLinkerVersion))
+    print '%16x size of code' % o.SizeOfCode
+    print '%16x size of initialized data' % o.SizeOfInitializedData
+    print '%16x size of uninitialized data' % o.SizeOfUninitializedData
+    print '%16x entry point (%08x)'  % (o.AddressOfEntryPoint, o.AddressOfEntryPoint+o.ImageBase)
+    print '%16x base of code' % o.BaseOfCode
+    print '%16x base of data' % o.BaseOfData
+    print '%16x image base (%08x to %08x)'  % (o.ImageBase,o.ImageBase,align(o.ImageBase+o.SizeOfImage,o.SectionAlignment)-1)
+    print '%16x section alignment' % o.SectionAlignment
+    print '%16x file alignment' % o.FileAlignment
+    print '%16s operating system version' % ('%d.%d' % (o.MajorOperatingSystemVersion,o.MinorOperatingSystemVersion))
+    print '%16s image version' % ('%d.%d' % (o.MajorImageVersion,o.MinorImageVersion))
+    print '%16s subsystem version' % ('%d.%d' % (o.MajorSubsystemVersion,o.MinorSubsystemVersion))
+    print '%16x Win32 version' % o.Win32VersionValue
+    print '%16x size of image' % o.SizeOfImage
+    print '%16x size of headers' % o.SizeOfHeaders
+    print '%16x checksum' % o.CheckSum
+    print '%16x subsystem (%s)' % (o.Subsystem, format_subsys(o.Subsystem))
+    print '%16x DLL characteristics' % o.DllCharacteristics
+    print '%16x size of stack reserve' % o.SizeOfStackReserve
+    print '%16x size of stack commit' % o.SizeOfStackCommit
+    print '%16x size of heap reserve' % o.SizeOfHeapReserve
+    print '%16x size of heap commit' % o.SizeOfHeapCommit
+    print '%16x loader flags' % o.LoaderFlags
+    print '%16x number of directories' % o.NumberOfRvaAndSizes
+    print '%16x [%8x] RVA [size] of Export Directory' % (o.DataDirectory[0].VirtualAddress,o.DataDirectory[0].Size)
+    print '%16x [%8x] RVA [size] of Import Directory' % (o.DataDirectory[1].VirtualAddress,o.DataDirectory[1].Size)
+    print '%16x [%8x] RVA [size] of Resource Directory' % (o.DataDirectory[2].VirtualAddress,o.DataDirectory[2].Size)
+    print '%16x [%8x] RVA [size] of Exception Directory' % (o.DataDirectory[3].VirtualAddress,o.DataDirectory[3].Size)
+    print '%16x [%8x] RVA [size] of Certificates Directory' % (o.DataDirectory[4].VirtualAddress,o.DataDirectory[4].Size)
+    print '%16x [%8x] RVA [size] of Base Relocation Directory' % (o.DataDirectory[5].VirtualAddress,o.DataDirectory[5].Size)
+    print '%16x [%8x] RVA [size] of Debug Directory' % (o.DataDirectory[6].VirtualAddress,o.DataDirectory[6].Size)
+    print '%16x [%8x] RVA [size] of Architecture Directory' % (o.DataDirectory[7].VirtualAddress,o.DataDirectory[7].Size)
+    print '%16x [%8x] RVA [size] of Global Pointer Directory' % (o.DataDirectory[8].VirtualAddress,o.DataDirectory[8].Size)
+    print '%16x [%8x] RVA [size] of Thread Storage Directory' % (o.DataDirectory[9].VirtualAddress,o.DataDirectory[9].Size)
+    print '%16x [%8x] RVA [size] of Load Configuration Directory' % (o.DataDirectory[10].VirtualAddress,o.DataDirectory[10].Size)
+    print '%16x [%8x] RVA [size] of Bound Import Directory' % (o.DataDirectory[11].VirtualAddress,o.DataDirectory[11].Size)
+    print '%16x [%8x] RVA [size] of Import Address Table Directory' % (o.DataDirectory[12].VirtualAddress,o.DataDirectory[12].Size)
+    print '%16x [%8x] RVA [size] of Delay Import Directory' % (o.DataDirectory[13].VirtualAddress,o.DataDirectory[13].Size)
+    print '%16x [%8x] RVA [size] of COM Descriptor Directory' % (o.DataDirectory[14].VirtualAddress,o.DataDirectory[14].Size)
+    print '%16x [%8x] RVA [size] of Reserved Directory' % (o.DataDirectory[15].VirtualAddress,o.DataDirectory[15].Size)
+    print ''
+
+    n = 0
+    for i in pef.get_sections():
+        n += 1
+        print 'SECTION HEADER #%d' % n
+        print '%8s name' % i.Name
+        print '%8x virtual size'  % i.VirtualSize
+        print '%8x virtual address (%08x to %08x)' % \
+            (i.VirtualAddress,
+                i.VirtualAddress+pef.get_image_base(),
+                i.VirtualAddress+pef.get_image_base()+
+                    align(max(i.VirtualSize,i.SizeOfRawData),o.SectionAlignment)-1)
+        print '%8x size of raw data' % i.SizeOfRawData
+        print '%8x file pointer to raw data' % i.PointerToRawData
+        print '%8x file pointer to relocation table' % i.PointerToRelocations
+        print '%8x file pointer to line numbers' % i.PointerToLinenumbers
+        print '%8x number of relocations' % i.NumberOfRelocations
+        print '%8x number of line numbers' % i.NumberOfLinenumbers
+        print '%8x flags' % i.Characteristics
+        print ''
+
+
 def main(script,argv):
 
     args = process_arguments(argv)
@@ -529,6 +604,8 @@ def main(script,argv):
         show_imports_funcs(args)
     elif c == CMD_QUICK_HEADERS:
         show_quick_headers(args)
+    elif c == CMD_FULL_HEADERS:
+        show_full_headers(args)
 
 if __name__ == '__main__':
     main(sys.argv[0],sys.argv[1:])
