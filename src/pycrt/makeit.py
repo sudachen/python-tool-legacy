@@ -29,6 +29,7 @@ CC_flags = [
         '-I"%s/Include"'%python_base,
         '-I"%s/Python"'%python_base,
         '-I"%s/Modules/expat"'%python_base,
+        '-I"../_ctypes"',
         '-D"Py_NO_ENABLE_SHARED"',
         ]
 CC_flags.append('-nologo')
@@ -164,10 +165,25 @@ sources = [
     ]
 
 sources = normolize_sources(sources,python_base)
-sources += ['../_lzss/_lzss.c']
-
+sources += [
+    '../_lzss/_lzss.c'
+    ]
+sources += [
+    '../_udis86/_udis86.c'
+    ]
+sources += [
+    '../_ctypes/prep_cif.c',
+    '../_ctypes/stgdict.c',
+    '../_ctypes/cfield.c',
+    '../_ctypes/callproc.c',
+    '../_ctypes/callbacks.c',
+    '../_ctypes/ffi.c',
+    '../_ctypes/malloc_closure.c',
+    '../_ctypes/win32.c',
+    '../_ctypes/_ctypes.c',
+    ]
+sources += ['config.c','_pycrt.c']
 objects = compile_files(sources,tempdir)
-objects += compile_files(['config.c'],tempdir)
 
 linker_flags = [
     '-nologo',
@@ -195,7 +211,8 @@ libs = [
     'gdi32.lib',
     'ws2_32.lib',
     'zS.lib',
+    'udis86S.lib'
     ]
 
 link_shared(objects,libs,tempdir,'../../pycrt.dll')
-link_static(objects+['../../lib/zS.lib'],tempdir,'../../lib/pycrtS.lib')
+link_static(objects+['../../lib/zS.lib','../../lib/udis86S.lib'],tempdir,'../../lib/pycrtS.lib')

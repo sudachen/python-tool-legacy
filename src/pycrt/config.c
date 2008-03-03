@@ -6,24 +6,17 @@
 #include "Python.h"
 
 extern void initarray(void);
-#ifndef MS_WIN64
 extern void initaudioop(void);
-#endif
 extern void initbinascii(void);
 extern void initcmath(void);
 extern void initerrno(void);
 extern void initgc(void);
-#ifndef MS_WIN64
 extern void initimageop(void);
-#endif
 extern void initmath(void);
 extern void initmd5(void);
 extern void initnt(void);
 extern void initoperator(void);
-/*extern void initregex(void);*/
-#ifndef MS_WIN64
 extern void initrgbimg(void);
-#endif
 extern void initsignal(void);
 extern void initsha(void);
 extern void initstrop(void);
@@ -32,10 +25,8 @@ extern void inittime(void);
 extern void initthread(void);
 extern void initcStringIO(void);
 extern void initcPickle(void);
-#ifdef WIN32
 extern void initmsvcrt(void);
 extern void init_locale(void);
-#endif
 extern void init_codecs(void);
 extern void init_weakref(void);
 extern void init_hotshot(void);
@@ -53,7 +44,6 @@ extern void init_sre(void);
 extern void initparser(void);
 extern void init_winreg(void);
 extern void initdatetime(void);
-
 extern void init_multibytecodec(void);
 extern void init_codecs_cn(void);
 extern void init_codecs_hk(void);
@@ -62,10 +52,6 @@ extern void init_codecs_jp(void);
 extern void init_codecs_kr(void);
 extern void init_codecs_tw(void);
 extern void init_subprocess(void);
-
-/* tools/freeze/makeconfig.py marker for additional "extern" */
-/* -- ADDMODULE MARKER 1 -- */
-
 extern void PyMarshal_Init(void);
 extern void initimp(void);
 extern void initpyteggo2(void);
@@ -74,131 +60,66 @@ extern void initpyexpat(void);
 extern void init_socket(void);
 extern void initselect(void);
 extern void initunicodedata(void);
-
 extern void init_lzss(void);
+extern void init_ctypes(void);
+extern void init_udis86(void);
+extern void init_pycrt(void);
 
 struct _inittab _PyImport_Inittab[] = {
-//#ifdef _BUILD_SCRAFTE
-//        {"_scrafte", init_scrafte},
-//#endif
-//#ifdef _BUILD_GADJET
-//        {"_gadjet", init_gadjet},
-//#endif
-//        {"pyteggo2", initpyteggo2},
-//        {"_vfs", init_vfs},
-        {"_lzss",init_lzss},
-        {"zlib", initzlib},
-        {"pyexpat",initpyexpat},
-        {"array", initarray},
-        {"_socket", init_socket},
-        {"_ssl", 0},
-        {"select", initselect},
-//        {"unicodedata", initunicodedata},
-//#ifdef MS_WINDOWS
-//#ifndef MS_WIN64
-//        {"audioop", initaudioop},
-//#endif
-//#endif
-        {"binascii", initbinascii},
-        {"cmath", initcmath},
-        {"errno", initerrno},
-        {"gc", initgc},
-//#ifndef MS_WIN64
-//        {"imageop", initimageop},
-//#endif
-        {"math", initmath},
-        {"md5", initmd5},
-        {"nt", initnt}, /* Use the NT os functions, not posix */
-        {"operator", initoperator},
-        /*{"regex", initregex},*/
-//#ifndef MS_WIN64
-//        {"rgbimg", initrgbimg},
-//#endif
-        {"signal", initsignal},
-        {"sha", initsha},
-        {"strop", initstrop},
-        {"struct", initstruct},
-        {"time", inittime},
+        {"__pycrt",      init_pycrt},
+        {"_lzss",       init_lzss},
+        {"_ctypes",     init_ctypes},
+        {"_udis86",     init_udis86},
+        {"zlib",        initzlib},
+        {"pyexpat",     initpyexpat},
+        {"array",       initarray},
+        {"_socket",     init_socket},
+        {"_ssl",        0},
+        {"select",      initselect},
+        {"binascii",    initbinascii},
+        {"cmath",       initcmath},
+        {"errno",       initerrno},
+        {"gc",          initgc},
+        {"math",        initmath},
+        {"md5",         initmd5},
+        {"operator",    initoperator},
+        {"signal",      initsignal},
+        {"sha",         initsha},
+        {"strop",       initstrop},
+        {"struct",      initstruct},
+        {"time",        inittime},
 #ifdef WITH_THREAD
-        {"thread", initthread},
+        {"thread",      initthread},
 #endif
-        {"cStringIO", initcStringIO},
-        {"cPickle", initcPickle},
+        {"cStringIO",   initcStringIO},
+        {"cPickle",     initcPickle},
 #ifdef WIN32
-        {"msvcrt", initmsvcrt},
-        {"_locale", init_locale},
+        {"nt",          initnt},
+        {"msvcrt",      initmsvcrt},
+        {"_locale",     init_locale},
+        {"_winreg",     init_winreg},
 #endif
-  /* XXX Should _subprocess go in a WIN32 block?  not WIN64? */
         {"_subprocess", init_subprocess},
-
-        {"_codecs", init_codecs},
-        {"_weakref", init_weakref},
-        {"_hotshot", init_hotshot},
-        {"_random", init_random},
-        {"_bisect", init_bisect},
-        {"_heapq", init_heapq},
-        {"itertools", inititertools},
+        {"_codecs",     init_codecs},
+        {"_weakref",    init_weakref},
+        {"_hotshot",    init_hotshot},
+        {"_random",     init_random},
+        {"_bisect",     init_bisect},
+        {"_heapq",      init_heapq},
+        {"itertools",   inititertools},
         {"collections", initcollections},
-  {"_symtable", init_symtable},
-  {"mmap", initmmap},
-  //{"_csv", init_csv},
-  {"_sre", init_sre},
-  {"parser", initparser},
-  {"_winreg", init_winreg},
-  {"datetime", initdatetime},
-
-  {"xxsubtype", initxxsubtype},
-  {"zipimport", initzipimport},
-
-  /* CJK codecs */
-  //{"_multibytecodec", init_multibytecodec},
-  //{"_codecs_cn", init_codecs_cn},
-  //{"_codecs_hk", init_codecs_hk},
-  //{"_codecs_iso2022", init_codecs_iso2022},
-  //{"_codecs_jp", init_codecs_jp},
-  //{"_codecs_kr", init_codecs_kr},
-  //{"_codecs_tw", init_codecs_tw},
-
-/* tools/freeze/makeconfig.py marker for additional "_inittab" entries */
-/* -- ADDMODULE MARKER 2 -- */
-
-        /* This module "lives in" with marshal.c */
-        {"marshal", PyMarshal_Init},
-
-        /* This lives it with import.c */
-        {"imp", initimp},
-
-        /* These entries are here for sys.builtin_module_names */
-        {"__main__", NULL},
-        {"__builtin__", NULL},
-        {"sys", NULL},
-        {"exceptions", NULL},
-
-        /* Sentinel */
+        {"_symtable",   init_symtable},
+        {"mmap",        initmmap},
+        {"_sre",        init_sre},
+        {"parser",      initparser},
+        {"datetime",    initdatetime},
+        {"xxsubtype",   initxxsubtype},
+        {"zipimport",   initzipimport},
+        {"marshal",     PyMarshal_Init},
+        {"imp",         initimp},
+        {"__main__",    0},
+        {"__builtin__", 0},
+        {"sys",         0},
+        {"exceptions",  0},
         {0, 0}
 };
-
-/*
-extern void ov_open_callbacks();
-extern void __teggo_classes_xdom_module();
-extern void __teggo_classes_collection_module();
-extern void __teggo_classes_keylist_module();
-extern void __teggo_classes_defparser_module();
-extern void __teggo_classes_format_module();
-extern void __teggo_classes_com_register_module();
-extern void __teggo_classes_com_dynamic_module();
-extern void __teggo_classes_hinstance_module();
-
-void *___imports[] =
-  {
-    &__teggo_classes_xdom_module,
-    &__teggo_classes_collection_module,
-    &__teggo_classes_keylist_module,
-    &__teggo_classes_defparser_module,
-    &__teggo_classes_format_module,
-    &__teggo_classes_com_register_module,
-    &__teggo_classes_com_dynamic_module,
-    &__teggo_classes_hinstance_module,
-    &ov_open_callbacks
-  };
-*/
