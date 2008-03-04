@@ -14,7 +14,6 @@ extern void initgc(void);
 extern void initimageop(void);
 extern void initmath(void);
 extern void initmd5(void);
-extern void initnt(void);
 extern void initoperator(void);
 extern void initrgbimg(void);
 extern void initsignal(void);
@@ -64,6 +63,8 @@ extern void init_lzss(void);
 extern void init_ctypes(void);
 extern void init_udis86(void);
 extern void init_pycrt(void);
+extern void initposix(void);
+extern void initnt(void);
 
 struct _inittab _PyImport_Inittab[] = {
         {"__pycrt",      init_pycrt},
@@ -88,18 +89,8 @@ struct _inittab _PyImport_Inittab[] = {
         {"strop",       initstrop},
         {"struct",      initstruct},
         {"time",        inittime},
-#ifdef WITH_THREAD
-        {"thread",      initthread},
-#endif
         {"cStringIO",   initcStringIO},
         {"cPickle",     initcPickle},
-#ifdef WIN32
-        {"nt",          initnt},
-        {"msvcrt",      initmsvcrt},
-        {"_locale",     init_locale},
-        {"_winreg",     init_winreg},
-#endif
-        {"_subprocess", init_subprocess},
         {"_codecs",     init_codecs},
         {"_weakref",    init_weakref},
         {"_hotshot",    init_hotshot},
@@ -121,5 +112,17 @@ struct _inittab _PyImport_Inittab[] = {
         {"__builtin__", 0},
         {"sys",         0},
         {"exceptions",  0},
+#ifdef WITH_THREAD
+        {"thread",      initthread},
+#endif
+#ifdef WIN32
+        {"nt",          initnt},
+        {"msvcrt",      initmsvcrt},
+        {"_locale",     init_locale},
+        {"_winreg",     init_winreg},
+        {"_subprocess", init_subprocess},
+#else
+        {"posix",       initposix},
+#endif
         {0, 0}
 };

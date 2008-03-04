@@ -1,4 +1,15 @@
+#!/usr/bin/python
+
 import os,sys,os.path
+
+os.chdir(os.path.dirname(sys.argv[0]))
+sys.path.append('../../lib')
+from make import *
+
+process_command_line();
+
+Platform = sys.platform
+if Platform != 'win32': Platform = 'posix'
 
 files = \
 ('zl_adler32.c',
@@ -16,16 +27,31 @@ files = \
 'zutil.c')
 
 srcdir = '.'
-tmpdir = '../../../~temp~/pycrt-zlibS'
+tmpdir = '../../../build-temp/pycrt-zlibS'
 
 files = [ os.path.join(srcdir,i) for i in files ]
 
-def c_compile(f):
-  if not os.path.exists(tmpdir):
-    os.makedirs(tmpdir)
-  o_file = os.path.join(tmpdir,os.path.basename(f)[:-2] + '.obj')
-  os.system('cl -nologo -c -MD -Ox -Fo"%s" "%s"'%(o_file,f))
-  return o_file
+if Platform == 'win32':
+    CC_flags = [
+        '-MD',
+        '-Ox',
+        '-Z7',
+        '-DWIN32',
+        '-DNDEBUG',
+        '-D_WINDOWS',
+        ]
+    CC_flags.append('-nologo')
+else:
+    CC_flags = [
+        '-O2',
+        '-g','-ggdb',
+        '-DNDEBUG',
+        ]
 
-objects = [c_compile(i) for i in files]
-os.system('lib -nologo -out:../../lib/zS.lib ' + ' '.join(objects))
+global_flags_set['C_FLAGS'] = CC_flags
+objects = compile_files(files,tmpdir)
+
+if Platform == 'win32':
+  link_static(objects,tmpdir,'../../lib/zS.lib')
+else:
+  link_static(objects,tmpdir,'../../lib/libzS.a')

@@ -80,7 +80,7 @@
 /* #define EH_FRAME_FLAGS "aw" */
 
 /* Define to the flags needed for the .section .eh_frame directive. */
-/* #define EH_FRAME_FLAGS "aw" */
+#define EH_FRAME_FLAGS "aw"
 
 /* Define this if you want extra debugging. */
 /* #undef FFI_DEBUG */
@@ -94,3 +94,8 @@
 /* Define this if you are using Purify and want to suppress spurious messages. */
 /* #undef USING_PURIFY */
 
+#ifdef LIBFFI_ASM
+#define FFI_HIDDEN(x)
+#else
+#define FFI_HIDDEN
+#endif

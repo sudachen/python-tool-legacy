@@ -1,48 +1,58 @@
+#!/usr/bin/python
 
 import os, os.path, sys, shutil
-
 sys.path.append('../../lib')
 from make import *
 
 process_command_line();
 
-if os.system('..\\zS\\makeit.py'): sys.exit(-1)
-
-tempdir = os.path.abspath('../../../~temp~/pycrt' + get_build_type())
+tempdir = os.path.abspath('../../../build-temp/pycrt' + get_build_type())
 python_base = '../../2.4.4'
-os.putenv('LIB','.'+';'+'../../lib'+';'+os.environ['LIB'])
+#os.putenv('LIB','.'+';'+'../../lib'+';'+os.environ['LIB'])
 
 Platform = sys.platform
 if Platform != 'win32': Platform = 'posix'
 
-CC_flags = [
+if Platform == 'win32':
+    CC_flags = [
         '-MD',
         '-Ox',
         '-Z7',
         '-DPyMODINIT_FUNC=void',
-        '-DUSE_DL_EXPORT',
-        '-DXML_STATIC',
-        '-DHAVE_MEMMOVE',
         '-DWIN32',
         '-DNDEBUG',
         '-D_WINDOWS',
-        '-I"%s/PC"'%python_base,
-        '-I"../../Include/'+Platform+'"',
-        '-I"%s/Include"'%python_base,
-        '-I"%s/Python"'%python_base,
-        '-I"%s/Modules/expat"'%python_base,
-        '-I"../_ctypes"',
-        '-D"Py_NO_ENABLE_SHARED"',
         ]
-CC_flags.append('-nologo')
-CC_flags.append('-I../../Include/zlib')
+    CC_flags.append('-nologo')
+else:
+    CC_flags = [
+        '-O2',
+        '-g -ggdb',
+        '-DNDEBUG',        
+        '-D__fastcall= ',
+        '--short-wchar',
+        '-Dstricmp=strcasecmp',
+        ]
+    
+CC_flags += [
+    '-I"../../Include/'+Platform+'"',
+    '-I"%s/PC"'%python_base,
+    '-I"%s/Include"'%python_base,
+    '-I"%s/Python"'%python_base,
+    '-I"%s/Modules/expat"'%python_base,
+    '-I"../_ctypes"',
+    '-D"Py_NO_ENABLE_SHARED"',
+    '-DPyMODINIT_FUNC=void',
+    '-DUSE_DL_EXPORT',
+    '-DXML_STATIC',
+    '-DHAVE_MEMMOVE',
+    ]
+
+CC_flags.append('-I../zS')
 global_flags_set['C_FLAGS'] = CC_flags
 
 sources = [
-    'PC/_winreg.c',
-    'PC/import_nt.c',
-    'PC/msvcrtmodule.c',
-    'PC/_subprocess.c',
+    'Python/pythonrun.c',
     'Modules/_bisectmodule.c',
     'Modules/_codecsmodule.c',
     'Modules/_heapqmodule.c',
@@ -157,14 +167,27 @@ sources = [
     'Python/sysmodule.c',
     'Python/thread.c',
     'Python/traceback.c',
-    'PC/getpathp.c',
     'Modules/posixmodule.c',
-    'Python/pythonrun.c',
     'Python/import.c',
     'Modules/getbuildinfo.c',
-    'Python/dynload_win.c',
-    'PC/dl_nt.c',
     ]
+
+if Platform == 'win32':
+    sources += [
+        'PC/_winreg.c',
+        'PC/import_nt.c',
+        'PC/msvcrtmodule.c',
+        'PC/dl_nt.c',
+        'Python/dynload_win.c',
+        'PC/_subprocess.c',
+        'PC/getpathp.c',
+        ]
+else:
+    sources += [
+        'Python/dynload_shlib.c',
+        'Modules/getpath.c',
+        #'Python/importdl.c',
+        ]
 
 sources = normolize_sources(sources,python_base)
 sources += [
@@ -173,48 +196,101 @@ sources += [
 sources += [
     '../_udis86/_udis86.c'
     ]
+
 sources += [
     '../_ctypes/prep_cif.c',
     '../_ctypes/stgdict.c',
     '../_ctypes/cfield.c',
     '../_ctypes/callproc.c',
     '../_ctypes/callbacks.c',
-    '../_ctypes/ffi.c',
+    '../_ctypes/ffi_x86.c',
     '../_ctypes/malloc_closure.c',
-    '../_ctypes/win32.c',
     '../_ctypes/_ctypes.c',
     ]
+
+sources += [
+    '../zS/zl_adler32.c',
+    '../zS/zl_compress.c',
+    '../zS/zl_crc32.c',
+    '../zS/zl_deflate.c',
+    '../zS/zl_infblock.c',
+    '../zS/zl_infcodes.c',
+    '../zS/zl_inffast.c',
+    '../zS/zl_inflate.c',
+    '../zS/zl_inftrees.c',
+    '../zS/zl_infutil.c',
+    '../zS/zl_trees.c',
+    '../zS/zl_uncompr.c',
+    '../zS/zutil.c',
+    ]
+
+sources += [
+    '../_udis86/libudis86/decode.c',
+    '../_udis86/libudis86/input.c',  
+    '../_udis86/libudis86/mnemonics.c',  
+    '../_udis86/libudis86/opcmap.c',  
+    '../_udis86/libudis86/syn-att.c',  
+    '../_udis86/libudis86/syn-intel.c',  
+    '../_udis86/libudis86/syn.c',  
+    '../_udis86/libudis86/udis86.c',
+    ]
+
+if Platform == 'win32':
+    sources += ['../_ctypes/win32.c']
+else:
+    sources += ['../_ctypes/sysv.S']
+
 sources += ['config.c','_pycrt.c']
 objects = compile_files(sources,tempdir)
 
-linker_flags = [
-    '-nologo',
-    '-incremental:no',
-    '-release',
-    '-debug',
-    '-dll',
-    '-opt:ref',
-    '-opt:icf',
-    '-def:pycrt.def',
-    '-base:0x3200000',
-    '-libpath:.',
-    '-pdb:../../pycrt.pdb',
-    '-implib:../../lib/pycrt.lib',
-    ]
+if Platform == 'win32':
+    linker_flags = [
+        '-nologo',
+        '-incremental:no',
+        '-release',
+        '-debug',
+        '-dll',
+        '-opt:ref',
+        '-opt:icf',
+        '-def:pycrt.def',
+        '-base:0x3200000',
+        '-libpath:.',
+        '-libpath:../../lib',
+        '-pdb:../../pycrt.pdb',
+        '-implib:../../lib/pycrt.lib',
+        ]
+else:
+    linker_flags = [
+#        '-g','-ggdb',
+        '-L"../../lib"',
+        ]
+
 global_flags_set['LINK_FLAGS'] = linker_flags
 
-libs = [
-    'kernel32.lib',
-    'user32.lib',
-    'advapi32.lib',
-    'shell32.lib',
-    'ole32.lib',
-    'oleaut32.lib',
-    'gdi32.lib',
-    'ws2_32.lib',
-    'zS.lib',
-    'udis86S.lib'
-    ]
+if Platform == 'win32':
+    libs = [
+        'kernel32.lib',
+        'user32.lib',
+        'advapi32.lib',
+        'shell32.lib',
+        'ole32.lib',
+        'oleaut32.lib',
+        'gdi32.lib',
+        'ws2_32.lib',
+        ]
+else:
+    libs = [
+        '-lm',
+        '-lpthread',
+        '-ldl',
+        '-lc',
+        '-lutil'
+        ]
 
-link_shared(objects,libs,tempdir,'../../pycrt.dll')
-link_static(objects+['../../lib/zS.lib','../../lib/udis86S.lib'],tempdir,'../../lib/pycrtS.lib')
+if Platform == 'win32':
+    link_shared(objects,libs,tempdir,'../../pycrt.dll')
+    link_static(objects,tempdir,'../../lib/pycrtS.lib')
+else:
+    link_shared(objects,libs,tempdir,'../../libpycrt.so')
+    link_static(objects,tempdir,'../../lib/libpycrtS.a')
+

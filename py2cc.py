@@ -1,23 +1,26 @@
 #!/usr/bin/python
 # -*- coding: cp1251 -*-
-#
-# (c)2008 Alexey Sudachen, alexey@sudachen.name
-# http://www.ethical-hacker.info/
-#
+"""
+(c)2008 Alexey Sudachen, alexey@sudachen.name
+http://www.ethical-hacker.info/
+"""
 
-version = "1.0"
+version = "1.1"
 
 import sys,os,os.path,getopt,marshal,locale
 from modulefinder import *
 
 locale.setlocale(locale.LC_ALL,'')
 
+default_toolkit = 'msc'
+if sys.platform != 'win32': default_toolkit = 'gnu'
+
 flags = { \
     'subsystem':'console',
     'addpath':[],
     'exclude':[],
     'depth':1,
-    'cc':'msc',
+    'cc':default_toolkit,
     }
 
 flags['exclude'].extend(['os2emxpath','macpath','ce','riscos','riscospath','_pycrt'])
@@ -93,7 +96,7 @@ def GetMyOpts(a):
     except getopt.error:
         raise ErrorMessageException(str(sys.exc_info()[1]))
 
-def OperateWithOpts(opts,flags):
+def OperateWithOpts(opts,args,flags):
     global version
     for o, a in opts:
         if o == '--verbose' or o == '-v':
@@ -276,9 +279,9 @@ compress_hook = None
 def Main(script,sys_argv):
     global flags, version, frozen_main, compress_hook
     opts, args = GetMyOpts(sys_argv)
-    OperateWithOpts(opts,flags)
+    OperateWithOpts(opts,args,flags)
 
-    script_dir = os.path.dirname(script)
+    script_dir = os.path.dirname(os.path.abspath(script))
     if not script_dir: script_dir = sys.prefix
 
     if not flags.get('no-logo'):
@@ -295,9 +298,10 @@ def Main(script,sys_argv):
 
     path = [os.path.normpath(os.path.dirname(args[0])),os.path.normpath(os.path.dirname(script))]
     path.extend(sys.path)
-    path.extend(flags['addpath'])
+    path = flags['addpath'] + path
     path.extend(AppendPythonPath(flags.get('no-python')))
-    sys.path.extend(path)
+    sys.path = path + sys.path
+
     #sys.path.extend(AppendPythonPath(False))
     #print sys.path
 
@@ -335,7 +339,9 @@ def Main(script,sys_argv):
                 python_lib = flags['python']+'.lib'
                 os.putenv('LIB',script_dir+'\\lib;'+os.environ['LIB'])
             else:
-                python_lib = '-l'+flags['python']+' -L'+script_dir+'/lib'
+                python_lib = '-l'+flags['python']+' -L'+script_dir+'/lib'+' -L'+script_dir
+                if flags.get('static'):
+                    python_lib = python_lib + ' -lm -lpthread -ldl -lc -lutil'
         else:
             if sys.platform == 'win32':
                 if flags['cc'] == 'msc':
@@ -343,7 +349,13 @@ def Main(script,sys_argv):
                 else:
                     python_lib = '-L"'+os.path.join(sys.exec_prefix,'libs')+'" -lpython%d%d'%sys.version_info[:2]
             else:
-                python_lib = '-lpython%d.%d'%sys.version_info[:2]
+                if os.path.exists(os.path.join(sys.exec_prefix,'lib','libpython%d.%d.so'%sys.version_info[:2])):
+                    python_lib = '-lpython%d.%d'%sys.version_info[:2]
+                else:
+                    python_lib = '-L'+os.path.join(sys.exec_prefix,'lib',
+                                                   'python%d.%d'%sys.version_info[:2],'config') + \
+                                                   ' -lpython%d.%d'%sys.version_info[:2] + ' -lpthread -lutil -lm -lc -ldl'
+                #python_lib = '-lpython%d.%d'%sys.version_info[:2]
 
         if flags['subsystem'] == 'windows' and sys.platform == 'win32':
             flags['c-flags'] = flags['c-flags']+ ' -D_PY2CC_WINDOWS_SUBSYSTEM'

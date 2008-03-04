@@ -239,7 +239,7 @@ global_tool_types = {
             'maker':_rc_build_rule,
             'object-ext':'.o','source_exts':['.rc','.RC','.Rc']},
         's-file':{
-            'maker':_S_build_rule,
+            'maker':_cc_build_rule,
             'object-ext':'.o','source_exts':['.S','.s']},
         }
     }
@@ -326,12 +326,25 @@ def _msc_link_file(objects,libs,tempdir,target,flags,cmd):
     else:
         try_clean_target(target)
 
+def quote(i):
+    if sys.platform == 'win32':
+        pass
+    else:
+        return i.replace('~','\\~').replace(' ','\\ ').replace('@','\\@').replace('#','\\#')
+
 def _gnu_link_file(objects,libs,tempdir,target,flags):
     if global_build_operation == 'BUILD':
+        #if len(objects) > 1:
+        #    build_a = os.path.join(tempdir,'@@build@@.a')
+        #    _gnu_lib_file(objects[1:],[],tempdir,build_a,[])
+        #else:
+        #    build_a = ''
+        #fmtime = os.stat(build_a)[stat.ST_MTIME]
         objectslist = os.path.join(tempdir,"~objectslist~")
         fmtime = _make_objects_list(objects,libs,tempdir,objectslist)
         if not os.path.exists(target) or fmtime > os.stat(target)[stat.ST_MTIME]:
-            cmd_S = ('ld -o"%s" '%target)+' '.join(flags)+(' @"%s"'%objectslist)
+            #cmd_S = ('gcc -o%s '%target)+' '.join(flags)+' '+objects[0]+' '+build_a
+            cmd_S = ('ld -o%s '%target)+' '.join(flags)+' @%s'%objectslist
             if global_verbose: print cmd_S
             if 0 != os.system( cmd_S ):
                 raise Exception('failed to link "%s"'%target)
@@ -340,28 +353,28 @@ def _gnu_link_file(objects,libs,tempdir,target,flags):
 
 def _gnu_lib_file(objects,libs,tempdir,target,flags):
     if global_build_operation == 'BUILD':
-        objectslist = os.path.join(tempdir,"~objectslist~")
         if not os.path.exists(tempdir):
             os.makedirs(tempdir)
-        if os.path.exists(objectslist):
-            os.unlink(objectslist)
-        f = open(objectslist,"w+t")
-        f.write('CREATE "%s"\n'+target)
+        l = []
         fmtime = 0
         for i in objects:
-            f.write('ADDMOD "'+i+'"\n')
+            l.append(i)
             fmtime = max(os.stat(i)[stat.ST_MTIME],fmtime)
         for i in libs:
-            f.write('ADDLIB "'+i+'"\n');
+            l.append(i)
             if os.path.exists(i):
                 fmtime = max(os.stat(i)[stat.ST_MTIME],fmtime)
-        f.write('SAVE\n');
-        f.close()
         if not os.path.exists(target) or fmtime > os.stat(target)[stat.ST_MTIME]:
-            cmd_S = 'ar -M "%s"'%objectslist
-            if global_verbose: print cmd_S
-            if 0 != os.system( cmd_S ):
-                raise Exception('failed to link "%s"'%target)
+            if os.path.exists(target): 
+                os.unlink(target)
+            for i in l:
+                cmd_S = 'ar qf %s %s'%(target,quote(i))
+                if global_verbose: print cmd_S
+                if 0 != os.system( cmd_S ):
+                    if os.path.exists(target): 
+                        os.unlink(target)
+                    raise Exception('failed to link "%s"'%target)
+            os.system( 'ranlib %s'%target )
     else:
         try_clean_target(target)
 
