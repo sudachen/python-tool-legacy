@@ -28,12 +28,12 @@ else:
     CC_flags = [
         '-O2',
         '-g -ggdb',
-        '-DNDEBUG',        
+        '-DNDEBUG',
         '-D__fastcall= ',
         '--short-wchar',
         '-Dstricmp=strcasecmp',
         ]
-    
+
 CC_flags += [
     '-I"../../Include/'+Platform+'"',
     '-I"%s/PC"'%python_base,
@@ -203,10 +203,14 @@ sources += [
     '../_ctypes/cfield.c',
     '../_ctypes/callproc.c',
     '../_ctypes/callbacks.c',
-    '../_ctypes/ffi_x86.c',
     '../_ctypes/malloc_closure.c',
     '../_ctypes/_ctypes.c',
     ]
+
+if Platform == 'win32':
+    sources += ['../_ctypes/win32.c','../_ctypes/ffi.c',]
+else:
+    sources += ['../_ctypes/sysv.S','../_ctypes/ffi_x86.c',]
 
 sources += [
     '../zS/zl_adler32.c',
@@ -226,19 +230,14 @@ sources += [
 
 sources += [
     '../_udis86/libudis86/decode.c',
-    '../_udis86/libudis86/input.c',  
-    '../_udis86/libudis86/mnemonics.c',  
-    '../_udis86/libudis86/opcmap.c',  
-    '../_udis86/libudis86/syn-att.c',  
-    '../_udis86/libudis86/syn-intel.c',  
-    '../_udis86/libudis86/syn.c',  
+    '../_udis86/libudis86/input.c',
+    '../_udis86/libudis86/mnemonics.c',
+    '../_udis86/libudis86/opcmap.c',
+    '../_udis86/libudis86/syn-att.c',
+    '../_udis86/libudis86/syn-intel.c',
+    '../_udis86/libudis86/syn.c',
     '../_udis86/libudis86/udis86.c',
     ]
-
-if Platform == 'win32':
-    sources += ['../_ctypes/win32.c']
-else:
-    sources += ['../_ctypes/sysv.S']
 
 sources += ['config.c','_pycrt.c']
 objects = compile_files(sources,tempdir)
@@ -293,4 +292,3 @@ if Platform == 'win32':
 else:
     link_shared(objects,libs,tempdir,'../../libpycrt.so')
     link_static(objects,tempdir,'../../lib/libpycrtS.a')
-
