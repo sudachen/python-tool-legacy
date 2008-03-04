@@ -27,7 +27,7 @@ CC_flags = [
 CC_flags.append('-nologo')
 global_flags_set['C_FLAGS'] = CC_flags
 
-tempdir = '../../../~temp~/_ctypes-' + get_build_type()
+tempdir = '../../../~temp~/pycrt-_ctypes-' + get_build_type()
 
 sources = [
     'prep_cif.c',

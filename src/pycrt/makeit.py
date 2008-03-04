@@ -6,6 +6,8 @@ from make import *
 
 process_command_line();
 
+if os.system('..\\zS\\makeit.py'): sys.exit(-1)
+
 tempdir = os.path.abspath('../../../~temp~/pycrt' + get_build_type())
 python_base = '../../2.4.4'
 os.putenv('LIB','.'+';'+'../../lib'+';'+os.environ['LIB'])
