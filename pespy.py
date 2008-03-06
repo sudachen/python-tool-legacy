@@ -13,7 +13,7 @@ if not _pycrt.compiled:
 from binutils import pecoff
 from binutils import disasm
 
-version = "1.0"
+version = "1.1"
 
 DEFAULT_LINES = 30
 F_ABSOLUTE_ADDRESS      = 0
