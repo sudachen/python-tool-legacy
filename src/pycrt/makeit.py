@@ -6,14 +6,19 @@ from make import *
 
 process_command_line();
 
-tempdir = os.path.abspath('../../../build-temp/pycrt' + get_build_type())
+if sys.platform == 'win32':
+    tempdir = os.path.abspath('../../../~temp~/pycrt-'+str(get_jVal('GCC')))
+else:
+    tempdir = os.path.abspath('../../../build-temp/pycrt')
 python_base = '../../2.4.4'
 #os.putenv('LIB','.'+';'+'../../lib'+';'+os.environ['LIB'])
 
 Platform = sys.platform
-if Platform != 'win32': Platform = 'posix'
+if Platform == 'win32' and get_jVal('GCC'): Platform = 'win32-mingw'
+if not Platform.startswith('win32'): Platform = 'posix'
 
 if Platform == 'win32':
+    set_msc_tool()
     CC_flags = [
         '-MD',
         '-Ox',
@@ -22,12 +27,33 @@ if Platform == 'win32':
         '-DWIN32',
         '-DNDEBUG',
         '-D_WINDOWS',
+        '-D"_WIN32_WINNT=0x400"',
         ]
     CC_flags.append('-nologo')
+elif Platform == 'win32-mingw':
+    gcc_libs_path = filter(lambda x: x.startswith('libraries'), os.popen("gcc -print-search-dirs").readlines())
+    if gcc_libs_path: gcc_libs_path = ' '.join('-L"'+j+'"' for j in gcc_libs_path[0][12:].strip().split(';'))
+    else: gcc_lib_path = ''
+    set_gnu_tool()
+    CC_flags = [
+        '-O2',
+        #'-g','-ggdb',
+        '-DPyMODINIT_FUNC=void',
+        '-DWIN32',
+        '-DNDEBUG',
+        '-D_WINDOWS',
+        '-D"_WIN32_WINNT=0x400"',
+        '-D__MINGW_ON_WINDOWS__',
+        ]
+    if get_jVal('GCC') and get_jVal('GCC') != True:
+        gcc_version_X = '-V '+get_jVal('GCC')
+        CC_flags = [gcc_version_X] + CC_flags
+    else:
+        gcc_version_X = ''
 else:
     CC_flags = [
         '-O2',
-        '-g -ggdb',
+        '-g','-ggdb',
         '-DNDEBUG',
         '-D__fastcall= ',
         '--short-wchar',
@@ -167,12 +193,11 @@ sources = [
     'Python/sysmodule.c',
     'Python/thread.c',
     'Python/traceback.c',
-    'Modules/posixmodule.c',
     'Python/import.c',
     'Modules/getbuildinfo.c',
     ]
 
-if Platform == 'win32':
+if Platform.startswith('win32'):
     sources += [
         'PC/_winreg.c',
         'PC/import_nt.c',
@@ -186,8 +211,12 @@ else:
     sources += [
         'Python/dynload_shlib.c',
         'Modules/getpath.c',
+        #'Modules/posixmodule.c',
         #'Python/importdl.c',
         ]
+
+if Platform != 'win32-mingw':
+    sources += [ 'Modules/posixmodule.c' ]
 
 sources = normolize_sources(sources,python_base)
 sources += [
@@ -196,6 +225,9 @@ sources += [
 sources += [
     '../_udis86/_udis86.c'
     ]
+
+if Platform == 'win32-mingw':
+    sources += [ './posixmodule.c' ]
 
 sources += [
     '../_ctypes/prep_cif.c',
@@ -209,6 +241,8 @@ sources += [
 
 if Platform == 'win32':
     sources += ['../_ctypes/win32.c','../_ctypes/ffi.c',]
+elif Platform == 'win32-mingw':
+    sources += ['../_ctypes/win32.S','../_ctypes/ffi.c',]
 else:
     sources += ['../_ctypes/sysv.S','../_ctypes/ffi_x86.c',]
 
@@ -241,6 +275,7 @@ sources += [
 
 sources += ['config.c','_pycrt.c']
 objects = compile_files(sources,tempdir)
+l_objects = objects
 
 if Platform == 'win32':
     linker_flags = [
@@ -258,6 +293,19 @@ if Platform == 'win32':
         '-pdb:../../pycrt.pdb',
         '-implib:../../lib/pycrt.lib',
         ]
+elif Platform == 'win32-mingw':
+    mingw_dllcrt = os.popen("gcc "+gcc_version_X+" -print-file-name=dllcrt2.o").readline().strip()
+    mingw_begin  = os.popen("gcc "+gcc_version_X+" -print-file-name=crtbegin.o").readline().strip()
+    mingw_end    = os.popen("gcc "+gcc_version_X+" -print-file-name=crtend.o").readline().strip()
+    linker_flags = [
+        '--enable-auto-image-base',
+        '-e _DllMainCRTStartup@12',
+        '-Bdynamic',
+        mingw_dllcrt,
+        '-L"../../lib"',
+        gcc_libs_path,
+        ]
+    l_objects = [mingw_begin] + objects + [mingw_end]
 else:
     linker_flags = [
 #        '-g','-ggdb',
@@ -277,6 +325,23 @@ if Platform == 'win32':
         'gdi32.lib',
         'ws2_32.lib',
         ]
+elif Platform == 'win32-mingw':
+    libs = [
+        '-lgcc',
+        '-lmingw32',
+        '-lmoldname',
+        '-lmingwex',
+        '-lkernel32',
+        '-luser32',
+        '-ladvapi32',
+        '-lshell32',
+        '-lole32',
+        '-loleaut32',
+        '-lgdi32',
+        '-lws2_32',
+        '-lmsvcrt',
+        '-luuid'
+        ]
 else:
     libs = [
         '-lm',
@@ -289,6 +354,9 @@ else:
 if Platform == 'win32':
     link_shared(objects,libs,tempdir,'../../pycrt.dll')
     link_static(objects,tempdir,'../../lib/pycrtS.lib')
+elif Platform == 'win32-mingw':
+    link_shared(l_objects,libs,tempdir,'../../pycrt.dll')
+    link_static(objects,tempdir,'../../lib/libpycrtS.a')
 else:
     link_shared(objects,libs,tempdir,'../../libpycrt.so')
     link_static(objects,tempdir,'../../lib/libpycrtS.a')

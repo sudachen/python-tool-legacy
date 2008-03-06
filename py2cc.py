@@ -341,7 +341,10 @@ def Main(script,sys_argv):
             else:
                 python_lib = '-l'+flags['python']+' -L'+script_dir+'/lib'+' -L'+script_dir
                 if flags.get('static'):
-                    python_lib = python_lib + ' -lm -lpthread -ldl -lc -lutil'
+                    if sys.platform == 'win32':
+                        python_lib = python_lib + ' -lole32 -lws2_32 -luuid -loleaut32'
+                    else:
+                        python_lib = python_lib + ' -lm -lpthread -ldl -lc -lutil'
         else:
             if sys.platform == 'win32':
                 if flags['cc'] == 'msc':
@@ -362,6 +365,9 @@ def Main(script,sys_argv):
         else:
             flags['c-flags'] = flags['c-flags']+ ' -D_PY2CC_CONSOLE_SUBSYSTEM'
 
+        if flags.get('static'):
+            flags['c-flags'] = flags['c-flags']+ ' -D_PY2CC_STATIC'
+
         if flags['cc'] == 'msc' and sys.platform == 'win32':
             CC = flags.get('cc-path','cl')
             libs = [
@@ -373,8 +379,6 @@ def Main(script,sys_argv):
               'gdi32.lib',
               'ws2_32.lib']
             c_flags =  ' -nologo -MD' + flags['c-flags']
-            if flags.get('static'):
-                c_flags = c_flags + ' -D_PY2CC_STATIC'
             cmd_S = '%s %s "%s" -o "%s" "%s" '% (CC,c_flags,C_file_name,output_name,python_lib) + ' '.join(libs)
         else:
             CC = flags.get('cc-path','gcc')

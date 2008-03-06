@@ -328,7 +328,7 @@ def _msc_link_file(objects,libs,tempdir,target,flags,cmd):
 
 def quote(i):
     if sys.platform == 'win32':
-        pass
+        return i
     else:
         return i.replace('~','\\~').replace(' ','\\ ').replace('@','\\@').replace('#','\\#')
 
@@ -365,13 +365,13 @@ def _gnu_lib_file(objects,libs,tempdir,target,flags):
             if os.path.exists(i):
                 fmtime = max(os.stat(i)[stat.ST_MTIME],fmtime)
         if not os.path.exists(target) or fmtime > os.stat(target)[stat.ST_MTIME]:
-            if os.path.exists(target): 
+            if os.path.exists(target):
                 os.unlink(target)
             for i in l:
                 cmd_S = 'ar qf %s %s'%(target,quote(i))
                 if global_verbose: print cmd_S
                 if 0 != os.system( cmd_S ):
-                    if os.path.exists(target): 
+                    if os.path.exists(target):
                         os.unlink(target)
                     raise Exception('failed to link "%s"'%target)
             os.system( 'ranlib %s'%target )
