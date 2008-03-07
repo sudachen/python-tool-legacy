@@ -173,13 +173,13 @@ def _cxx_build_rule(source,target,flags,deps):
     return target
 
 def _rc_build_rule(source,target,flags,deps):
-    rel_flags = global_flags_set['RC_FLAGS'] + _select_flags_with_build_type('RC_')
+    rel_flags = global_flags_set['RC_FLAGS'] + _select_flags_with_build_type('RC_') + flags
     if global_build_operation == 'BUILD':
         if _need_to_build(source,target):
             if global_tool_set == 'msc':
-                cmd_S = 'rc %s -fo"%s" %s' % (' '.join(flags),target,source)
+                cmd_S = 'rc %s -fo"%s" %s' % (' '.join(rel_flags),target,source)
             else:
-                cmd_S = 'windres %s -Ocoff "%s" "%s"' % (' '.join(flags),source,target)
+                cmd_S = 'windres %s -Ocoff "%s" "%s"' % (' '.join(rel_flags),source,target)
             if global_verbose: print cmd_S
             e = os.system(cmd_S)
             if e != 0 :
@@ -189,10 +189,10 @@ def _rc_build_rule(source,target,flags,deps):
     return target
 
 def _S_build_rule(source,target,flags,deps):
-    rel_flags = global_flags_set['S_FLAGS'] + _select_flags_with_build_type('S_')
+    rel_flags = global_flags_set['S_FLAGS'] + _select_flags_with_build_type('S_') + flags
     if global_build_operation == 'BUILD':
         if _need_to_build(source,target):
-            cmd_S = 'as %s -o"%s" %s' % (' '.join(flags),target,source)
+            cmd_S = 'as %s -o"%s" %s' % (' '.join(rel_flags),target,source)
             if global_verbose: print cmd_S
             e = os.system(cmd_S)
             if e != 0 :
