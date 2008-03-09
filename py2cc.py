@@ -23,7 +23,7 @@ flags = { \
     'cc':default_toolkit,
     }
 
-flags['exclude'].extend(['os2emxpath','macpath','ce','riscos','riscospath','_pycrt'])
+flags['exclude'].extend(['os2emxpath','macpath','ce','riscos','riscospath','__pycrt'])
 
 if sys.platform == 'win32':
     import _winreg

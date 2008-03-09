@@ -35,7 +35,7 @@ def disasm_ptr(ptr_in_process_memory,assume_pc,memory_limit,max_ins_count,style=
     return _udis86.disasm_ptr(ptr_in_process_memory,assume_pc,memory_limit,max_ins_count,style)
 
 def disasm_str(bytes,assume_pc,max_ins_count,style='att'):
-    pass
+    return _udis86.disasm_str(bytes,assume_pc,max_ins_count,style)
 
 UD_Iaaa = 0
 UD_Iaad = 1

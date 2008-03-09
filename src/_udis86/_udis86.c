@@ -173,7 +173,7 @@ C_STATIC PyObject *udis86_disasmem_str(PyObject *_,PyObject *args)
   {
     char *p = 0, *style = 0;
     int  pc = 0, area_size, max_command_count;
-    if ( PyArg_ParseTuple(args,"s#iii|s",&p,&area_size,&pc,&max_command_count,&style) )
+    if ( PyArg_ParseTuple(args,"s#ii|s",&p,&area_size,&pc,&max_command_count,&style) )
       {
         ud86_syntax_t syntax = UD_SYN_ATT;
         if ( style ) syntax = convert_to_style(style);
